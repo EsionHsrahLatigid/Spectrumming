@@ -26,7 +26,7 @@ jobs:
       product_slug: spectrumming
       cmake_option_prefix: SPECTRUMMING
       debug_targets_json: '["SpectrummingCoreTests"]'
-      release_test_targets_json: '["SpectrummingCoreTests","SpectrummingIntegrationTests","SpectrummingPluginLoadTest","SpectrummingBridgeProtocolTests","SpectrummingBridge"]'
+      release_test_targets_json: '["SpectrummingCoreTests","SpectrummingIntegrationTests","SpectrummingPluginLoadTest","SpectrummingBridgeProtocolTests","SpectrummingSharedFrameFileTests","SpectrummingBridge"]'
       windows_debug_plugins: false
 
   public-copy:
