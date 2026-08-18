@@ -29,8 +29,7 @@ juce::File makeTestImage()
     auto file = juce::File::getSpecialLocation(juce::File::tempDirectory)
                     .getNonexistentChildFile("spectrumming-integration", ".png", false);
     juce::Image image(juce::Image::RGB, 64, 32, true);
-    juce::Graphics graphics(image);
-    graphics.fillAll(juce::Colours::white);
+    image.clear(image.getBounds(), juce::Colours::white);
     if(auto stream = file.createOutputStream())
     {
         juce::PNGImageFormat png;
