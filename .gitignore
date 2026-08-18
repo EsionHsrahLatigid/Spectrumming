@@ -1,0 +1,13 @@
+build/
+artifacts/
+JUCE/
+.omx/
+
+.DS_Store
+*.user
+*.log
+
+*.vst3
+*.component
+*.app
+*.exe

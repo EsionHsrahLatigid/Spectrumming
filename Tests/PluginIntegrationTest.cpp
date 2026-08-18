@@ -1,0 +1,138 @@
+#include "ParameterIDs.h"
+#include "PluginProcessor.h"
+
+#include <juce_events/juce_events.h>
+
+#include <algorithm>
+#include <cmath>
+#include <iostream>
+#include <memory>
+
+namespace
+{
+bool check(const bool condition, const char* message)
+{
+    if(! condition)
+        std::cerr << "[FAIL] " << message << '\n';
+    return condition;
+}
+
+void setParameter(SpectrummingAudioProcessor& processor, const char* id, const float value)
+{
+    if(auto* parameter = processor.parameterState().getParameter(id))
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
+}
+
+juce::File makeTestImage()
+{
+    auto file = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                    .getNonexistentChildFile("spectrumming-integration", ".png", false);
+    juce::Image image(juce::Image::RGB, 64, 32, true);
+    juce::Graphics graphics(image);
+    graphics.fillAll(juce::Colours::white);
+    if(auto stream = file.createOutputStream())
+    {
+        juce::PNGImageFormat png;
+        png.writeImageToStream(image, *stream);
+        stream->flush();
+    }
+    return file;
+}
+
+bool verifyFinite(const juce::AudioBuffer<float>& audio)
+{
+    for(int channel = 0; channel < audio.getNumChannels(); ++channel)
+        for(int sample = 0; sample < audio.getNumSamples(); ++sample)
+            if(! std::isfinite(audio.getSample(channel, sample)))
+                return false;
+    return true;
+}
+} // namespace
+
+int main()
+{
+    juce::ScopedJuceInitialiser_GUI initialiseJuce;
+    auto processor = std::make_unique<SpectrummingAudioProcessor>();
+    bool passed = true;
+
+    passed &= check(processor->getName() == "Spectrumming", "product identity should be Spectrumming");
+    passed &= check(processor->acceptsMidi(), "instrument should accept MIDI");
+    passed &= check(! processor->isMidiEffect(), "instrument should not be a MIDI effect");
+    passed &= check(processor->getParameters().size() == 20, "public parameter contract should contain 20 controls");
+
+    juce::AudioProcessor::BusesLayout stereo;
+    stereo.outputBuses.add(juce::AudioChannelSet::stereo());
+    passed &= check(processor->isBusesLayoutSupported(stereo), "stereo synth output should be supported");
+
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor->createEditor());
+    passed &= check(editor != nullptr, "processor should create an editor");
+    if(editor != nullptr)
+    {
+        editor->resized();
+        passed &= check(editor->getWidth() == 640 && editor->getHeight() == 480,
+                        "editor should use the approved 640x480 footprint");
+        juce::Image capture(juce::Image::RGB, 640, 480, true);
+        juce::Graphics graphics(capture);
+        editor->paintEntireComponent(graphics, true);
+        const auto capturePath = juce::SystemStats::getEnvironmentVariable(
+            "SPECTRUMMING_EDITOR_CAPTURE", {});
+        if(capturePath.isNotEmpty())
+            if(auto output = juce::File(capturePath).createOutputStream())
+            {
+                juce::PNGImageFormat png;
+                passed &= check(png.writeImageToStream(capture, *output),
+                                "editor capture should be writable");
+            }
+        for(int y = 0; y < capture.getHeight(); y += 8)
+            for(int x = 0; x < capture.getWidth(); x += 8)
+            {
+                const auto colour = capture.getPixelAt(x, y);
+                const auto maximum = std::max({ colour.getRed(), colour.getGreen(), colour.getBlue() });
+                const auto minimum = std::min({ colour.getRed(), colour.getGreen(), colour.getBlue() });
+                passed &= check(static_cast<int>(maximum) - static_cast<int>(minimum) <= 8,
+                                "editor should remain monochrome");
+            }
+    }
+
+    const auto imageFile = makeTestImage();
+    juce::String error;
+    passed &= check(processor->loadImageFile(imageFile, error), "test image should load");
+    passed &= check(processor->previewImageSnapshot().isValid(), "loaded image should create a preview");
+
+    setParameter(*processor, spectrumming::parameters::triggerMode, 1.0f);
+    setParameter(*processor, spectrumming::parameters::attack, 0.0f);
+    setParameter(*processor, spectrumming::parameters::release, 10.0f);
+    processor->prepareToPlay(48000.0, 256);
+
+    juce::AudioBuffer<float> audio(2, 256);
+    audio.clear();
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 60, 1.0f), 64);
+    midi.addEvent(juce::MidiMessage::noteOff(1, 60), 192);
+    processor->processBlock(audio, midi);
+    passed &= check(verifyFinite(audio), "image-derived audio should remain finite");
+    passed &= check(audio.getMagnitude(0, 0, 64) == 0.0f,
+                    "sample-offset MIDI should preserve silence before note-on");
+    passed &= check(audio.getMagnitude(0, 64, 128) > 0.001f,
+                    "white image should produce audible spectral output after note-on");
+
+    setParameter(*processor, spectrumming::parameters::gamma, 2.5f);
+    juce::MemoryBlock state;
+    processor->getStateInformation(state);
+    passed &= check(state.getSize() > 128, "state should include parameters and compressed image frame");
+    imageFile.deleteFile();
+
+    SpectrummingAudioProcessor restored;
+    restored.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+    passed &= check(restored.previewImageSnapshot().isValid(),
+                    "embedded frame should restore without the original image file");
+    passed &= check(std::abs(restored.parameterState().getRawParameterValue(
+                                 spectrumming::parameters::gamma)->load() - 2.5f) < 0.01f,
+                    "parameter state should round-trip");
+    passed &= check(restored.sourceStateSnapshot().kind == spectrumming::plugin::SourceKind::image,
+                    "source kind should round-trip");
+
+    if(passed)
+        std::cout << "Spectrumming plug-in integration checks passed\n";
+    return passed ? 0 : 1;
+}

@@ -1,0 +1,65 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "engine-debug",
+      "displayName": "Engine Debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/engine-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SPECTRUMMING_BUILD_PLUGIN": "OFF",
+        "SPECTRUMMING_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "plugin-release",
+      "displayName": "Plugin Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/plugin-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SPECTRUMMING_BUILD_PLUGIN": "ON",
+        "SPECTRUMMING_BUILD_TESTS": "ON",
+        "EHL_COPY_PLUGIN_AFTER_BUILD": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "engine-debug",
+      "configurePreset": "engine-debug",
+      "targets": [
+        "SpectrummingCoreTests"
+      ]
+    },
+    {
+      "name": "plugin-release",
+      "configurePreset": "plugin-release",
+      "targets": [
+        "ehl_stage_products",
+        "SpectrummingCoreTests",
+        "SpectrummingIntegrationTests",
+        "SpectrummingPluginLoadTest",
+        "SpectrummingBridgeProtocolTests",
+        "SpectrummingBridge"
+      ]
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "engine-debug",
+      "configurePreset": "engine-debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "plugin-release",
+      "configurePreset": "plugin-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}
