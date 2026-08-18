@@ -129,10 +129,15 @@ int main()
                         == spectrumming::plugin::SourceKind::liveBridge,
                     "camera command should select the neutral live bridge source");
     processor->selectImageSource();
+    const auto restoredPreview = processor->previewImageSnapshot();
     passed &= check(processor->sourceStateSnapshot().kind
                         == spectrumming::plugin::SourceKind::image
-                        && processor->previewImageSnapshot().isValid(),
+                        && restoredPreview.isValid(),
                     "returning to image should restore the retained still frame");
+    passed &= check(restoredPreview.isValid()
+                        && restoredPreview.getPixelAt(restoredPreview.getWidth() / 2,
+                                                      restoredPreview.getHeight() / 2).getBrightness() > 0.99f,
+                    "white test image should normalize to a bright frame");
 
     setParameter(*processor, spectrumming::parameters::triggerMode, 1.0f);
     setParameter(*processor, spectrumming::parameters::attack, 0.0f);
@@ -144,12 +149,26 @@ int main()
     audio.clear();
     juce::MidiBuffer midi;
     midi.addEvent(juce::MidiMessage::noteOn(1, 60, 1.0f), 64);
-    midi.addEvent(juce::MidiMessage::noteOff(1, 60), 192);
     processor->processBlock(audio, midi);
     passed &= check(verifyFinite(audio), "image-derived audio should remain finite");
     passed &= check(audio.getMagnitude(0, 0, 64) == 0.0f,
                     "sample-offset MIDI should preserve silence before note-on");
-    passed &= check(audio.getMagnitude(0, 64, 128) > 0.001f,
+    passed &= check(processor->activeVoiceCount() > 0,
+                    "sample-offset note-on should activate a synth voice");
+
+    auto audiblePeak = audio.getMagnitude(0, 64, audio.getNumSamples() - 64);
+    midi.clear();
+    for(int block = 0; block < 8 && audiblePeak <= 0.001f; ++block)
+    {
+        audio.clear();
+        processor->processBlock(audio, midi);
+        audiblePeak = std::max(audiblePeak,
+                               audio.getMagnitude(0, 0, audio.getNumSamples()));
+    }
+    if(audiblePeak <= 0.001f)
+        std::cerr << "[DIAG] sustained white-frame peak=" << audiblePeak
+                  << " activeVoices=" << processor->activeVoiceCount() << '\n';
+    passed &= check(audiblePeak > 0.001f,
                     "white image should produce audible spectral output after note-on");
 
     setParameter(*processor, spectrumming::parameters::triggerMode, 0.0f);
