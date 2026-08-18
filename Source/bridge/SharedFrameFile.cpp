@@ -122,8 +122,17 @@ bool SharedFrameFile::open(const bool writer)
         return false;
     }
 
+#if JUCE_WINDOWS
+    // JUCE's Windows read-only mapping omits FILE_SHARE_WRITE, so it cannot be
+    // opened while the bridge keeps its read-write mapping alive. The reader
+    // still treats the mapped bytes as const; read-write access is only needed
+    // to preserve the live writer/reader sharing contract on Windows.
+    constexpr auto readerAccess = juce::MemoryMappedFile::readWrite;
+#else
+    constexpr auto readerAccess = juce::MemoryMappedFile::readOnly;
+#endif
     mapping = std::make_unique<juce::MemoryMappedFile>(
-        file, writer ? juce::MemoryMappedFile::readWrite : juce::MemoryMappedFile::readOnly, false);
+        file, writer ? juce::MemoryMappedFile::readWrite : readerAccess, false);
     return isOpen() && mapping->getSize() == mappedBytes;
 }
 

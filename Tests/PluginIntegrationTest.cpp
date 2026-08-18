@@ -180,14 +180,14 @@ int main()
     passed &= check(state.getSize() > 128, "state should include parameters and compressed image frame");
     imageFile.deleteFile();
 
-    SpectrummingAudioProcessor restored;
-    restored.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
-    passed &= check(restored.previewImageSnapshot().isValid(),
+    auto restored = std::make_unique<SpectrummingAudioProcessor>();
+    restored->setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+    passed &= check(restored->previewImageSnapshot().isValid(),
                     "embedded frame should restore without the original image file");
-    passed &= check(std::abs(restored.parameterState().getRawParameterValue(
+    passed &= check(std::abs(restored->parameterState().getRawParameterValue(
                                  spectrumming::parameters::gamma)->load() - 2.5f) < 0.01f,
                     "parameter state should round-trip");
-    passed &= check(restored.sourceStateSnapshot().kind == spectrumming::plugin::SourceKind::image,
+    passed &= check(restored->sourceStateSnapshot().kind == spectrumming::plugin::SourceKind::image,
                     "source kind should round-trip");
 
     if(passed)
