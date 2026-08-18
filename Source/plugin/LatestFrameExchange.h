@@ -29,7 +29,7 @@ public:
 
         auto& targetSlot = slots[static_cast<std::size_t>(target)];
         targetSlot.frame = frame;
-        targetSlot.version = nextVersion++;
+        targetSlot.version = nextVersion.fetch_add(1, std::memory_order_relaxed);
         targetSlot.state.store(SlotState::ready, std::memory_order_release);
 
         const auto replaced = publishedIndex.exchange(target, std::memory_order_acq_rel);
@@ -78,6 +78,6 @@ private:
 
     std::array<Slot, 3> slots;
     std::atomic<int> publishedIndex { -1 };
-    std::uint64_t nextVersion = 1;
+    std::atomic<std::uint64_t> nextVersion { 1 };
 };
 } // namespace spectrumming::plugin

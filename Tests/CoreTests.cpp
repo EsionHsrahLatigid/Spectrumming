@@ -417,23 +417,25 @@ void testAliasGuardStaysFinite()
 void testFrameExchangeOwnershipUnderConcurrentUpdates()
 {
     spectrumming::plugin::LatestFrameExchange exchange;
-    std::atomic<bool> producerDone { false };
+    std::atomic<int> producersDone { 0 };
     std::atomic<bool> payloadWasConsistent { true };
     std::atomic<int> framesRead { 0 };
 
-    std::thread producer([&]
+    const auto produceFrames = [&exchange, &producersDone](const int seed)
     {
         std::vector<std::uint8_t> pixels(64U * 32U);
         for(int generation = 1; generation <= 2000; ++generation)
         {
-            const auto value = static_cast<std::uint8_t>(generation & 0xff);
+            const auto value = static_cast<std::uint8_t>((generation + seed) & 0xff);
             std::fill(pixels.begin(), pixels.end(), value);
             LumaFrame frame;
             assert(frame.setPixels(64, 32, pixels.data()));
             exchange.publish(frame);
         }
-        producerDone.store(true, std::memory_order_release);
-    });
+        producersDone.fetch_add(1, std::memory_order_release);
+    };
+    std::thread producerA(produceFrames, 0);
+    std::thread producerB(produceFrames, 73);
 
     std::thread consumer([&]
     {
@@ -443,7 +445,7 @@ void testFrameExchangeOwnershipUnderConcurrentUpdates()
         {
             if(! exchange.consumeLatest(frame, version))
             {
-                if(producerDone.load(std::memory_order_acquire))
+                if(producersDone.load(std::memory_order_acquire) == 2)
                     break;
                 std::this_thread::yield();
                 continue;
@@ -457,7 +459,8 @@ void testFrameExchangeOwnershipUnderConcurrentUpdates()
         }
     });
 
-    producer.join();
+    producerA.join();
+    producerB.join();
     consumer.join();
     assert(payloadWasConsistent.load(std::memory_order_relaxed));
     assert(framesRead.load(std::memory_order_relaxed) > 0);

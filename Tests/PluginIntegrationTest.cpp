@@ -1,5 +1,6 @@
 #include "ParameterIDs.h"
 #include "PluginProcessor.h"
+#include "plugin/BridgeLocator.h"
 
 #include <juce_events/juce_events.h>
 
@@ -60,6 +61,31 @@ int main()
     passed &= check(! processor->isMidiEffect(), "instrument should not be a MIDI effect");
     passed &= check(processor->getParameters().size() == 20, "public parameter contract should contain 20 controls");
 
+    const auto locatorRoot = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                                 .getNonexistentChildFile("spectrumming-locator", {}, false);
+#if JUCE_MAC
+    const auto fakeModule = locatorRoot.getChildFile(
+        "vst3/Spectrumming.vst3/Contents/MacOS/Spectrumming");
+    const auto fakeBridge = locatorRoot.getChildFile(
+        "bridge/Spectrumming Bridge.app/Contents/MacOS/Spectrumming Bridge");
+#elif JUCE_WINDOWS
+    const auto fakeModule = locatorRoot.getChildFile("vst3/Spectrumming.vst3/Contents/x86_64-win/Spectrumming.vst3");
+    const auto fakeBridge = locatorRoot.getChildFile("bridge/Spectrumming Bridge.exe");
+#else
+    const auto fakeModule = locatorRoot.getChildFile("vst3/Spectrumming.vst3");
+    const auto fakeBridge = juce::File {};
+#endif
+    fakeModule.getParentDirectory().createDirectory();
+    fakeModule.replaceWithText("module");
+    if(fakeBridge != juce::File {})
+    {
+        fakeBridge.getParentDirectory().createDirectory();
+        fakeBridge.replaceWithText("bridge");
+        passed &= check(spectrumming::plugin::BridgeLocator::findNear(fakeModule) == fakeBridge,
+                        "bridge locator should resolve a staged companion beside the plug-in formats");
+    }
+    locatorRoot.deleteRecursively();
+
     juce::AudioProcessor::BusesLayout stereo;
     stereo.outputBuses.add(juce::AudioChannelSet::stereo());
     passed &= check(processor->isBusesLayoutSupported(stereo), "stereo synth output should be supported");
@@ -98,6 +124,15 @@ int main()
     juce::String error;
     passed &= check(processor->loadImageFile(imageFile, error), "test image should load");
     passed &= check(processor->previewImageSnapshot().isValid(), "loaded image should create a preview");
+    processor->selectCameraSource();
+    passed &= check(processor->sourceStateSnapshot().kind
+                        == spectrumming::plugin::SourceKind::liveBridge,
+                    "camera command should select the neutral live bridge source");
+    processor->selectImageSource();
+    passed &= check(processor->sourceStateSnapshot().kind
+                        == spectrumming::plugin::SourceKind::image
+                        && processor->previewImageSnapshot().isValid(),
+                    "returning to image should restore the retained still frame");
 
     setParameter(*processor, spectrumming::parameters::triggerMode, 1.0f);
     setParameter(*processor, spectrumming::parameters::attack, 0.0f);
@@ -115,6 +150,29 @@ int main()
                     "sample-offset MIDI should preserve silence before note-on");
     passed &= check(audio.getMagnitude(0, 64, 128) > 0.001f,
                     "white image should produce audible spectral output after note-on");
+
+    setParameter(*processor, spectrumming::parameters::triggerMode, 0.0f);
+    setParameter(*processor, spectrumming::parameters::clockMode, 0.0f);
+    setParameter(*processor, spectrumming::parameters::cycleMode, 1.0f);
+    setParameter(*processor, spectrumming::parameters::freeDuration, 0.25f);
+    setParameter(*processor, spectrumming::parameters::release, 0.0f);
+    processor->reset();
+
+    bool observedOneShotCompletion = false;
+    for(int block = 0; block < 96 && ! observedOneShotCompletion; ++block)
+    {
+        audio.clear();
+        midi.clear();
+        processor->processBlock(audio, midi);
+        observedOneShotCompletion = processor->activeVoiceCount() == 0;
+    }
+    passed &= check(observedOneShotCompletion,
+                    "AUTO one-shot should complete and expose an idle synth");
+
+    audio.clear();
+    processor->processBlock(audio, midi);
+    passed &= check(processor->activeVoiceCount() > 0,
+                    "AUTO one-shot should re-arm and trigger the next cycle");
 
     setParameter(*processor, spectrumming::parameters::gamma, 2.5f);
     juce::MemoryBlock state;

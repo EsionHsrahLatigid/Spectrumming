@@ -63,6 +63,7 @@ enum class ValidationCode {
     frameTooLarge,
     payloadTooSmall,
     missingPayload,
+    wrongStream,
 };
 
 inline const char* validationCodeName(ValidationCode code) noexcept {
@@ -77,6 +78,7 @@ inline const char* validationCodeName(ValidationCode code) noexcept {
         case ValidationCode::frameTooLarge: return "frameTooLarge";
         case ValidationCode::payloadTooSmall: return "payloadTooSmall";
         case ValidationCode::missingPayload: return "missingPayload";
+        case ValidationCode::wrongStream: return "wrongStream";
     }
 
     return "unknown";

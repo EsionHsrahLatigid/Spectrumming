@@ -40,7 +40,29 @@ int main()
     ok &= expect(received.pixels == pixels, "payload mismatch");
     ok &= expect(! reader.readLatest(received, generation), "unchanged frame read twice");
 
+    auto wrongStreamHeader = header;
+    ++wrongStreamHeader.streamId;
+    ok &= expect(writer.submitFrame({ wrongStreamHeader, pixels.data(), pixels.size() })
+                     == spectrumming::bridge::ValidationCode::wrongStream,
+                 "wrong stream should be reported explicitly");
+
     const auto backingFile = writer.backingFile();
+    reader.close();
+    writer.close();
+
+    {
+        juce::FileOutputStream corrupt(backingFile);
+        ok &= expect(corrupt.openedOk() && corrupt.setPosition(0) && corrupt.writeByte(0),
+                     "test frame header corruption failed");
+        corrupt.flush();
+    }
+    generation = 0;
+    ok &= expect(writer.openWriter(), "writer did not recover corrupt control header");
+    ok &= expect(reader.openReader(), "reader did not reopen after control recovery");
+    ok &= expect(writer.publish({ header, pixels.data(), pixels.size() }),
+                 "frame did not publish after control recovery");
+    ok &= expect(reader.readLatest(received, generation),
+                 "frame did not read after control recovery");
     reader.close();
     writer.close();
     ok &= expect(backingFile.deleteFile(), "test frame file cleanup failed");

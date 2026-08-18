@@ -70,9 +70,11 @@ ValidationCode SharedFrameFile::submitFrame(const FrameView& frame)
     const auto validation = validateFrame(frame);
     if(validation != ValidationCode::ok)
         return validation;
-    if(frame.header.streamId != streamId
-       || frame.header.pixelFormat != static_cast<std::uint32_t>(PixelFormat::gray8)
-       || expectedPixelBytes(frame.header) > maximumPayloadBytes)
+    if(frame.header.streamId != streamId)
+        return ValidationCode::wrongStream;
+    if(frame.header.pixelFormat != static_cast<std::uint32_t>(PixelFormat::gray8))
+        return ValidationCode::unsupportedPixelFormat;
+    if(expectedPixelBytes(frame.header) > maximumPayloadBytes)
         return ValidationCode::frameTooLarge;
     return publish(frame) ? ValidationCode::ok : ValidationCode::missingPayload;
 }
@@ -130,12 +132,18 @@ bool SharedFrameFile::initializeFile()
     if(! lock.enter(250))
         return false;
 
-    const auto needsInitialization = ! file.existsAsFile()
+    const auto needsResize = ! file.existsAsFile()
         || file.getSize() != static_cast<juce::int64>(mappedBytes);
 
-    if(needsInitialization)
+    if(needsResize)
     {
         if(! file.getParentDirectory().createDirectory())
+        {
+            lock.exit();
+            return false;
+        }
+
+        if(file.existsAsFile() && ! file.deleteFile())
         {
             lock.exit();
             return false;
@@ -151,17 +159,18 @@ bool SharedFrameFile::initializeFile()
         stream.flush();
     }
 
-    if(needsInitialization)
+    juce::MemoryMappedFile initialMapping(file, juce::MemoryMappedFile::readWrite, false);
+    if(initialMapping.getData() == nullptr || initialMapping.getSize() != mappedBytes)
     {
-        juce::MemoryMappedFile initialMapping(file, juce::MemoryMappedFile::readWrite, false);
-        if(initialMapping.getData() == nullptr || initialMapping.getSize() != mappedBytes)
-        {
-            lock.exit();
-            return false;
-        }
+        lock.exit();
+        return false;
+    }
 
+    auto* control = static_cast<ControlHeader*>(initialMapping.getData());
+    if(needsResize || ! validControl(*control))
+    {
         std::memset(initialMapping.getData(), 0, mappedBytes);
-        auto* control = static_cast<ControlHeader*>(initialMapping.getData());
+        control = static_cast<ControlHeader*>(initialMapping.getData());
         *control = ControlHeader{};
         control->streamId = streamId;
     }

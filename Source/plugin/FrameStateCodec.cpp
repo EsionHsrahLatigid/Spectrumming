@@ -41,12 +41,6 @@ juce::ValueTree FrameStateCodec::encode(const SourceState& state, const Embedded
     tree.setProperty("stream_id", state.streamId, nullptr);
     tree.setProperty("frozen", state.frozen, nullptr);
     tree.setProperty("stale", state.stale, nullptr);
-    tree.setProperty("mirror", state.mirror, nullptr);
-    tree.setProperty("roi_x", juce::jlimit(0.0f, 1.0f, state.roiX), nullptr);
-    tree.setProperty("roi_y", juce::jlimit(0.0f, 1.0f, state.roiY), nullptr);
-    tree.setProperty("roi_width", juce::jlimit(0.0f, 1.0f, state.roiWidth), nullptr);
-    tree.setProperty("roi_height", juce::jlimit(0.0f, 1.0f, state.roiHeight), nullptr);
-    tree.setProperty("quality_bands", state.qualityBands, nullptr);
 
     juce::MemoryBlock compressed;
     if(compress(frame, compressed))
@@ -73,12 +67,6 @@ bool FrameStateCodec::decode(const juce::ValueTree& tree, SourceState& state, Em
     state.streamId = tree.getProperty("stream_id").toString();
     state.frozen = static_cast<bool>(tree.getProperty("frozen", false));
     state.stale = static_cast<bool>(tree.getProperty("stale", false));
-    state.mirror = static_cast<bool>(tree.getProperty("mirror", false));
-    state.roiX = juce::jlimit(0.0f, 1.0f, static_cast<float>(tree.getProperty("roi_x", 0.0)));
-    state.roiY = juce::jlimit(0.0f, 1.0f, static_cast<float>(tree.getProperty("roi_y", 0.0)));
-    state.roiWidth = juce::jlimit(0.0f, 1.0f, static_cast<float>(tree.getProperty("roi_width", 1.0)));
-    state.roiHeight = juce::jlimit(0.0f, 1.0f, static_cast<float>(tree.getProperty("roi_height", 1.0)));
-    state.qualityBands = juce::jlimit(64, 256, static_cast<int>(tree.getProperty("quality_bands", 128)));
 
     frame = {};
     const auto* binary = tree.getProperty(frameProperty).getBinaryData();

@@ -2,6 +2,7 @@
 
 #include "ParameterIDs.h"
 #include "PluginEditor.h"
+#include "plugin/BridgeLocator.h"
 #include "plugin/ImageNormalizer.h"
 
 #include <algorithm>
@@ -33,15 +34,6 @@ float smoothingCoefficient(const float milliseconds, const double sampleRate) no
         return 1.0f;
     const auto samples = milliseconds * 0.001 * sampleRate;
     return static_cast<float>(1.0 - std::exp(-1.0 / samples));
-}
-
-spectrumming::core::BandCount bandsFor(const int quality) noexcept
-{
-    if(quality >= 256)
-        return spectrumming::core::BandCount::Bands256;
-    if(quality <= 64)
-        return spectrumming::core::BandCount::Bands64;
-    return spectrumming::core::BandCount::Bands128;
 }
 
 spectrumming::core::ScanMode scanModeFor(const int choice) noexcept
@@ -80,10 +72,9 @@ SpectrummingAudioProcessor::BusesProperties SpectrummingAudioProcessor::createBu
 void SpectrummingAudioProcessor::prepareToPlay(const double sampleRate, const int)
 {
     preparedSampleRate = std::max(8000.0, sampleRate);
-    const auto state = sourceStateSnapshot();
     spectrumming::core::SynthConfig config;
     config.sampleRate = preparedSampleRate;
-    config.bandCount = bandsFor(state.qualityBands);
+    config.bandCount = spectrumming::core::BandCount::Bands128;
     config.lowFrequencyHz = 40.0f;
     config.highFrequencyHz = 18000.0f;
     config.outputGain = juce::Decibels::decibelsToGain(-6.0f);
@@ -137,6 +128,11 @@ void SpectrummingAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         cursor = eventPosition;
     }
     renderRange(buffer, cursor, buffer.getNumSamples());
+
+    // One-shot voices finish inside the synth, so re-arm AUTO after the
+    // generated voice has fully stopped or completed its release.
+    if(autoVoiceActive && synth.getActiveVoiceCount() == 0)
+        autoVoiceActive = false;
 
     if(loadInt(parameters, spectrumming::parameters::mute) != 0)
         buffer.clear();
@@ -551,22 +547,7 @@ void SpectrummingAudioProcessor::setStatus(const juce::String& status)
 
 juce::File SpectrummingAudioProcessor::findBridgeExecutable() const
 {
-    if(const auto configured = juce::SystemStats::getEnvironmentVariable("SPECTRUMMING_BRIDGE_PATH", {});
-       configured.isNotEmpty())
-        return juce::File(configured);
-
-#if JUCE_MAC
-    const auto userApp = juce::File::getSpecialLocation(juce::File::userHomeDirectory)
-        .getChildFile("Applications/Spectrumming Bridge.app/Contents/MacOS/Spectrumming Bridge");
-    if(userApp.existsAsFile())
-        return userApp;
-    return juce::File("/Applications/Spectrumming Bridge.app/Contents/MacOS/Spectrumming Bridge");
-#elif JUCE_WINDOWS
-    return juce::File::getSpecialLocation(juce::File::globalApplicationsDirectory)
-        .getChildFile("Spectrumming Bridge/Spectrumming Bridge.exe");
-#else
-    return {};
-#endif
+    return spectrumming::plugin::BridgeLocator::resolve();
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

@@ -20,11 +20,5 @@ struct SourceState final
     juce::String streamId;
     bool frozen = false;
     bool stale = false;
-    bool mirror = false;
-    float roiX = 0.0f;
-    float roiY = 0.0f;
-    float roiWidth = 1.0f;
-    float roiHeight = 1.0f;
-    int qualityBands = 128;
 };
 } // namespace spectrumming::plugin

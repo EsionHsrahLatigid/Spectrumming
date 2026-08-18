@@ -13,8 +13,8 @@ Use local checkouts to avoid network fetches:
 
 ```sh
 cmake --preset plugin-release \
-  -DEHL_JUCE_SOURCE_DIR=/Users/2bit/prog/juce/Plitch/build/release/_deps/juce-src \
-  -DEHL_JUCE_DESIGN_MODULE_SOURCE_DIR=/Users/2bit/prog/juce/juce-ehl-design-module \
+  -DEHL_JUCE_SOURCE_DIR=<path-to-juce-8.0.15> \
+  -DEHL_JUCE_DESIGN_MODULE_SOURCE_DIR=<path-to-juce-ehl-design-module> \
   -DEHL_COPY_PLUGIN_AFTER_BUILD=OFF
 ```
 
@@ -42,6 +42,8 @@ The `ehl_stage_products` target writes `ARTIFACTS.txt` and stages:
 - `bridge/Spectrumming Bridge.app` on Apple or `bridge/Spectrumming Bridge.exe` on Windows
 
 The AU intentionally does not declare `sandboxSafe`: the live-source path uses a companion process and local shared-frame transport. Its plist suppresses JUCE's broad default `resourceUsage` exceptions.
+
+`OPEN BRIDGE` resolves `SPECTRUMMING_BRIDGE_PATH` first, then a bridge beside the staged VST3/AU/Standalone products, then the current working tree's staged artifacts, and finally `~/Applications` or the platform-wide application directory.
 
 ## Verification
 

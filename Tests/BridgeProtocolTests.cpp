@@ -64,6 +64,7 @@ void testHeaderLayoutAndValidation() {
            ValidationCode::frameTooLarge);
 
     EXPECT(validateHeader(header, 23) == ValidationCode::payloadTooSmall);
+    EXPECT(std::string(validationCodeName(ValidationCode::wrongStream)) == "wrongStream");
 }
 
 void testLatestFrameWinsWithBoundedTripleBuffer() {

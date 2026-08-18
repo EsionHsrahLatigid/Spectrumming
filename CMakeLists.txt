@@ -14,34 +14,23 @@ set(EHL_JUCE_SOURCE_DIR "" CACHE PATH "Existing JUCE source checkout; avoids net
 set(EHL_JUCE_DESIGN_MODULE_SOURCE_DIR "" CACHE PATH
     "Existing juce-ehl-design-module checkout; uses modules/juce-ehl-design-module when unset")
 
-set(spectrumming_core_source "${CMAKE_CURRENT_SOURCE_DIR}/Source/core/SpectrummingCore.cpp")
-if(EXISTS "${spectrumming_core_source}")
-    add_library(spectrumming_core STATIC Source/core/SpectrummingCore.cpp)
-    target_include_directories(spectrumming_core PUBLIC Source)
-    target_compile_features(spectrumming_core PUBLIC cxx_std_17)
+add_library(spectrumming_core STATIC Source/core/SpectrummingCore.cpp)
+target_include_directories(spectrumming_core PUBLIC Source)
+target_compile_features(spectrumming_core PUBLIC cxx_std_17)
 
-    if(MSVC)
-        target_compile_options(spectrumming_core PRIVATE /W4)
-    else()
-        target_compile_options(spectrumming_core PRIVATE -Wall -Wextra -Wpedantic)
-    endif()
+if(MSVC)
+    target_compile_options(spectrumming_core PRIVATE /W4)
 else()
-    message(STATUS "Skipping spectrumming_core: Source/core/SpectrummingCore.cpp is not present")
+    target_compile_options(spectrumming_core PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 if(SPECTRUMMING_BUILD_TESTS)
     enable_testing()
 
-    if(TARGET spectrumming_core AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Tests/CoreTests.cpp")
-        find_package(Threads REQUIRED)
-        add_executable(SpectrummingCoreTests Tests/CoreTests.cpp)
-        target_link_libraries(SpectrummingCoreTests PRIVATE spectrumming_core Threads::Threads)
-        add_test(NAME SpectrummingCoreTests COMMAND SpectrummingCoreTests)
-    else()
-        add_custom_target(SpectrummingCoreTests
-            COMMAND ${CMAKE_COMMAND} -E echo "SpectrummingCoreTests skipped: core source or Tests/CoreTests.cpp is not present")
-        message(STATUS "Skipping SpectrummingCoreTests: core source or Tests/CoreTests.cpp is not present")
-    endif()
+    find_package(Threads REQUIRED)
+    add_executable(SpectrummingCoreTests Tests/CoreTests.cpp)
+    target_link_libraries(SpectrummingCoreTests PRIVATE spectrumming_core Threads::Threads)
+    add_test(NAME SpectrummingCoreTests COMMAND SpectrummingCoreTests)
 endif()
 
 if(SPECTRUMMING_BUILD_PLUGIN)
@@ -112,15 +101,8 @@ if(SPECTRUMMING_BUILD_PLUGIN)
     set(spectrumming_plugin_sources
         ${spectrumming_required_plugin_sources}
         ${spectrumming_plugin_module_sources})
-    set(spectrumming_have_plugin_sources TRUE)
-    foreach(source_path IN LISTS spectrumming_required_plugin_sources)
-        if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${source_path}")
-            set(spectrumming_have_plugin_sources FALSE)
-        endif()
-    endforeach()
 
-    if(spectrumming_have_plugin_sources AND TARGET spectrumming_core)
-        juce_add_plugin(Spectrumming
+    juce_add_plugin(Spectrumming
             VERSION ${PROJECT_VERSION}
             COMPANY_NAME "EsionHsrahLatigid"
             BUNDLE_ID "jp.ehl.spectrumming"
@@ -162,11 +144,6 @@ if(SPECTRUMMING_BUILD_PLUGIN)
                 juce::juce_recommended_config_flags
                 juce::juce_recommended_lto_flags
                 juce::juce_recommended_warning_flags)
-
-        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Source/StandaloneApp.cpp")
-            target_sources(Spectrumming_Standalone PRIVATE Source/StandaloneApp.cpp)
-            target_compile_definitions(Spectrumming_Standalone PRIVATE JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1)
-        endif()
 
         set(spectrumming_stage_platform "linux-x64")
         if(APPLE)
@@ -242,72 +219,43 @@ if(SPECTRUMMING_BUILD_PLUGIN)
         add_custom_target(Spectrumming_Artifacts DEPENDS ehl_stage_products)
 
         if(SPECTRUMMING_BUILD_TESTS)
-            if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Tests/PluginIntegrationTest.cpp")
-                add_executable(SpectrummingIntegrationTests Tests/PluginIntegrationTest.cpp)
-                target_include_directories(SpectrummingIntegrationTests PRIVATE Source)
-                target_link_libraries(SpectrummingIntegrationTests PRIVATE Spectrumming juce::juce_audio_utils)
-                add_test(NAME SpectrummingPluginIntegrationTests COMMAND SpectrummingIntegrationTests)
-            else()
-                add_custom_target(SpectrummingIntegrationTests
-                    COMMAND ${CMAKE_COMMAND} -E echo "SpectrummingIntegrationTests skipped: Tests/PluginIntegrationTest.cpp is not present")
-            endif()
+            add_executable(SpectrummingIntegrationTests Tests/PluginIntegrationTest.cpp)
+            target_include_directories(SpectrummingIntegrationTests PRIVATE Source)
+            target_link_libraries(SpectrummingIntegrationTests PRIVATE Spectrumming juce::juce_audio_utils)
+            add_test(NAME SpectrummingPluginIntegrationTests COMMAND SpectrummingIntegrationTests)
 
-            if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Tests/PluginLoadTest.cpp")
-                juce_add_console_app(SpectrummingPluginLoadTest
-                    PRODUCT_NAME "Spectrumming Plugin Load Test")
-                target_sources(SpectrummingPluginLoadTest PRIVATE Tests/PluginLoadTest.cpp)
-                target_include_directories(SpectrummingPluginLoadTest PRIVATE Source)
-                target_link_libraries(SpectrummingPluginLoadTest PRIVATE
-                    juce::juce_audio_processors_headless
-                    juce::juce_recommended_config_flags
-                    juce::juce_recommended_warning_flags)
-                target_compile_definitions(SpectrummingPluginLoadTest PRIVATE
-                    JUCE_PLUGINHOST_VST3=1
-                    JUCE_USE_CURL=0
-                    JUCE_WEB_BROWSER=0)
-                add_dependencies(SpectrummingPluginLoadTest Spectrumming_VST3)
-                add_test(NAME SpectrummingHostVST3
-                    COMMAND SpectrummingPluginLoadTest
-                            "${spectrumming_juce_products}/VST3/Spectrumming.vst3"
-                            "Spectrumming")
-            else()
-                add_custom_target(SpectrummingPluginLoadTest
-                    COMMAND ${CMAKE_COMMAND} -E echo "SpectrummingPluginLoadTest skipped: Tests/PluginLoadTest.cpp is not present")
-            endif()
+            juce_add_console_app(SpectrummingPluginLoadTest
+                PRODUCT_NAME "Spectrumming Plugin Load Test")
+            target_sources(SpectrummingPluginLoadTest PRIVATE Tests/PluginLoadTest.cpp)
+            target_include_directories(SpectrummingPluginLoadTest PRIVATE Source)
+            target_link_libraries(SpectrummingPluginLoadTest PRIVATE
+                juce::juce_audio_processors_headless
+                juce::juce_recommended_config_flags
+                juce::juce_recommended_warning_flags)
+            target_compile_definitions(SpectrummingPluginLoadTest PRIVATE
+                JUCE_PLUGINHOST_VST3=1
+                JUCE_USE_CURL=0
+                JUCE_WEB_BROWSER=0)
+            add_dependencies(SpectrummingPluginLoadTest Spectrumming_VST3)
+            add_test(NAME SpectrummingHostVST3
+                COMMAND SpectrummingPluginLoadTest
+                        "${spectrumming_juce_products}/VST3/Spectrumming.vst3"
+                        "Spectrumming")
 
-            if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Tests/BridgeProtocolTests.cpp")
-                file(GLOB_RECURSE spectrumming_bridge_protocol_sources CONFIGURE_DEPENDS
-                    "${CMAKE_CURRENT_SOURCE_DIR}/Source/bridge/*.cpp"
-                    "${CMAKE_CURRENT_SOURCE_DIR}/Source/bridge/*.h")
-                list(FILTER spectrumming_bridge_protocol_sources EXCLUDE REGEX ".*/BridgeMain\\.cpp$")
-                add_executable(SpectrummingBridgeProtocolTests
-                    Tests/BridgeProtocolTests.cpp
-                    ${spectrumming_bridge_protocol_sources})
-                target_include_directories(SpectrummingBridgeProtocolTests PRIVATE Source)
-                target_link_libraries(SpectrummingBridgeProtocolTests PRIVATE
-                    juce::juce_audio_utils
-                    juce::juce_recommended_config_flags
-                    juce::juce_recommended_warning_flags)
-                if(TARGET spectrumming_core)
-                    target_link_libraries(SpectrummingBridgeProtocolTests PRIVATE spectrumming_core)
-                endif()
-                add_test(NAME SpectrummingBridgeProtocolTests COMMAND SpectrummingBridgeProtocolTests)
-            else()
-                add_custom_target(SpectrummingBridgeProtocolTests
-                    COMMAND ${CMAKE_COMMAND} -E echo "SpectrummingBridgeProtocolTests skipped: Tests/BridgeProtocolTests.cpp is not present")
-            endif()
+            add_executable(SpectrummingBridgeProtocolTests Tests/BridgeProtocolTests.cpp)
+            target_include_directories(SpectrummingBridgeProtocolTests PRIVATE Source)
+            target_compile_features(SpectrummingBridgeProtocolTests PRIVATE cxx_std_17)
+            add_test(NAME SpectrummingBridgeProtocolTests COMMAND SpectrummingBridgeProtocolTests)
 
-            if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Tests/SharedFrameFileTests.cpp")
-                add_executable(SpectrummingSharedFrameFileTests
-                    Tests/SharedFrameFileTests.cpp
-                    Source/bridge/SharedFrameFile.cpp)
-                target_include_directories(SpectrummingSharedFrameFileTests PRIVATE Source)
-                target_link_libraries(SpectrummingSharedFrameFileTests PRIVATE
-                    juce::juce_core
-                    juce::juce_recommended_config_flags
-                    juce::juce_recommended_warning_flags)
-                add_test(NAME SpectrummingSharedFrameFileTests COMMAND SpectrummingSharedFrameFileTests)
-            endif()
+            add_executable(SpectrummingSharedFrameFileTests
+                Tests/SharedFrameFileTests.cpp
+                Source/bridge/SharedFrameFile.cpp)
+            target_include_directories(SpectrummingSharedFrameFileTests PRIVATE Source)
+            target_link_libraries(SpectrummingSharedFrameFileTests PRIVATE
+                juce::juce_core
+                juce::juce_recommended_config_flags
+                juce::juce_recommended_warning_flags)
+            add_test(NAME SpectrummingSharedFrameFileTests COMMAND SpectrummingSharedFrameFileTests)
 
             add_test(
                 NAME SpectrummingArtifactChecks
@@ -322,23 +270,7 @@ if(SPECTRUMMING_BUILD_PLUGIN)
                         -DEXPECT_AU_SANDBOX_SAFE=FALSE
                         -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyArtifacts.cmake)
         endif()
-    else()
-        add_custom_target(ehl_stage_products
-            COMMAND ${CMAKE_COMMAND} -E echo "ehl_stage_products skipped: plug-in sources or core target are not present")
-        add_custom_target(Spectrumming_Artifacts DEPENDS ehl_stage_products)
-        add_custom_target(SpectrummingIntegrationTests
-            COMMAND ${CMAKE_COMMAND} -E echo "SpectrummingIntegrationTests skipped: plug-in sources or core target are not present")
-        add_custom_target(SpectrummingPluginLoadTest
-            COMMAND ${CMAKE_COMMAND} -E echo "SpectrummingPluginLoadTest skipped: plug-in sources or core target are not present")
-        add_custom_target(SpectrummingBridgeProtocolTests
-            COMMAND ${CMAKE_COMMAND} -E echo "SpectrummingBridgeProtocolTests skipped: plug-in sources or core target are not present")
-        message(STATUS "Skipping Spectrumming plug-in targets: plug-in sources or core target are not present")
-    endif()
-
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Source/bridge/BridgeMain.cpp" AND (APPLE OR WIN32))
-        file(GLOB_RECURSE spectrumming_bridge_sources CONFIGURE_DEPENDS
-            "${CMAKE_CURRENT_SOURCE_DIR}/Source/bridge/*.cpp"
-            "${CMAKE_CURRENT_SOURCE_DIR}/Source/bridge/*.h")
+    if(APPLE OR WIN32)
         juce_add_gui_app(SpectrummingBridge
             COMPANY_NAME "EsionHsrahLatigid"
             BUNDLE_ID "jp.ehl.spectrumming.bridge"
@@ -346,7 +278,14 @@ if(SPECTRUMMING_BUILD_PLUGIN)
             CAMERA_PERMISSION_ENABLED TRUE
             CAMERA_PERMISSION_TEXT "Spectrumming Bridge uses the selected camera as a visual spectrum source."
             PRODUCT_NAME "Spectrumming Bridge")
-        target_sources(SpectrummingBridge PRIVATE ${spectrumming_bridge_sources})
+        target_sources(SpectrummingBridge PRIVATE
+            Source/bridge/BridgeDefaults.h
+            Source/bridge/BridgeFrame.h
+            Source/bridge/BridgeInterfaces.h
+            Source/bridge/BridgeMain.cpp
+            Source/bridge/JuceCameraFrameSource.h
+            Source/bridge/SharedFrameFile.cpp
+            Source/bridge/SharedFrameFile.h)
         target_include_directories(SpectrummingBridge PRIVATE Source)
         target_compile_definitions(SpectrummingBridge PRIVATE
             JUCE_REPORT_APP_USAGE=0
@@ -360,9 +299,7 @@ if(SPECTRUMMING_BUILD_PLUGIN)
             juce::juce_video
             juce::juce_recommended_config_flags
             juce::juce_recommended_warning_flags)
-        if(TARGET spectrumming_core)
-            target_link_libraries(SpectrummingBridge PRIVATE spectrumming_core)
-        endif()
+        target_link_libraries(SpectrummingBridge PRIVATE spectrumming_core)
 
         if(DEFINED spectrumming_staged_products)
             if(APPLE)
@@ -384,7 +321,7 @@ if(SPECTRUMMING_BUILD_PLUGIN)
         endif()
     else()
         add_custom_target(SpectrummingBridge
-            COMMAND ${CMAKE_COMMAND} -E echo "SpectrummingBridge skipped: Source/bridge/BridgeMain.cpp is not present")
-        message(STATUS "Skipping SpectrummingBridge: Source/bridge/BridgeMain.cpp is not present")
+            COMMAND ${CMAKE_COMMAND} -E echo "SpectrummingBridge is supported on macOS and Windows")
+        message(STATUS "SpectrummingBridge is not built on this platform")
     endif()
 endif()

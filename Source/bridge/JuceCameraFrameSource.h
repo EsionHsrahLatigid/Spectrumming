@@ -1,6 +1,6 @@
 #pragma once
 
-#include "TripleBufferFrameStore.h"
+#include "BridgeInterfaces.h"
 
 #if defined(SPECTRUMMING_BRIDGE_ENABLE_JUCE_CAMERA) && \
     (defined(__APPLE__) || defined(_WIN32))
@@ -101,28 +101,6 @@ private:
     std::atomic<std::uint64_t> nextFrameId_ { 1 };
     std::vector<std::uint8_t> scratch_;
     std::unique_ptr<juce::CameraDevice> device_;
-};
-
-class JuceCameraBridgeApp final : public IFrameSource {
-public:
-    explicit JuceCameraBridgeApp(std::uint64_t streamId)
-        : camera_(frames_, streamId) {}
-
-    bool start(int cameraIndex = 0) {
-        return camera_.start(cameraIndex);
-    }
-
-    void stop() {
-        camera_.stop();
-    }
-
-    bool readLatestFrame(FrameStorage& destination) const override {
-        return frames_.readLatestFrame(destination);
-    }
-
-private:
-    TripleBufferFrameStore frames_;
-    JuceCameraFrameSource camera_;
 };
 
 } // namespace spectrumming::bridge
