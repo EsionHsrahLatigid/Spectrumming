@@ -137,6 +137,7 @@ int main()
     setParameter(*processor, spectrumming::parameters::triggerMode, 1.0f);
     setParameter(*processor, spectrumming::parameters::attack, 0.0f);
     setParameter(*processor, spectrumming::parameters::release, 10.0f);
+    setParameter(*processor, spectrumming::parameters::frameSmooth, 0.0f);
     processor->prepareToPlay(48000.0, 256);
 
     juce::AudioBuffer<float> audio(2, 256);
