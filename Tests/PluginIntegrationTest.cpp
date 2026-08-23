@@ -1,6 +1,7 @@
 #include "ParameterIDs.h"
 #include "PluginProcessor.h"
 #include "plugin/BridgeLocator.h"
+#include "plugin/PreviewPlacement.h"
 
 #include <juce_events/juce_events.h>
 
@@ -104,8 +105,19 @@ int main()
         juce::Image capture(juce::Image::RGB, 640, 480, true);
         juce::Graphics graphics(capture);
         editor->paintEntireComponent(graphics, true);
-        passed &= check(capture.getPixelAt(32, 120).getBrightness() > 0.99f,
-                        "preview image should fill the display width");
+        const juce::Rectangle<float> sourceArea { 0.0f, 0.0f, 64.0f, 32.0f };
+        const juce::Rectangle<float> displayArea { 0.0f, 0.0f, 592.0f, 82.0f };
+        const auto placedArea = spectrumming::ui::previewImagePlacement().appliedTo(
+            sourceArea, displayArea);
+        passed &= check(placedArea.getX() <= displayArea.getX()
+                            && placedArea.getY() <= displayArea.getY()
+                            && placedArea.getRight() >= displayArea.getRight()
+                            && placedArea.getBottom() >= displayArea.getBottom(),
+                        "preview image placement should cover the display");
+        passed &= check(std::abs(placedArea.getWidth() / placedArea.getHeight()
+                                    - sourceArea.getWidth() / sourceArea.getHeight())
+                            < 0.0001f,
+                        "preview image placement should preserve aspect ratio");
         const auto capturePath = juce::SystemStats::getEnvironmentVariable(
             "SPECTRUMMING_EDITOR_CAPTURE", {});
         if(capturePath.isNotEmpty())

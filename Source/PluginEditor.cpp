@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 
 #include "ParameterIDs.h"
+#include "plugin/PreviewPlacement.h"
 
 #include <cmath>
 
@@ -268,9 +269,7 @@ void SpectrummingAudioProcessorEditor::FrameDisplay::paint(juce::Graphics& graph
     auto imageArea = bounds.reduced(8);
     imageArea.removeFromBottom(22);
     if(image.isValid())
-        graphics.drawImage(image, imageArea.toFloat(),
-                           juce::RectanglePlacement::centred
-                               | juce::RectanglePlacement::fillDestination);
+        graphics.drawImage(image, imageArea.toFloat(), spectrumming::ui::previewImagePlacement());
     else
     {
         graphics.setColour(ehl::juce_design::Palette::ink());
