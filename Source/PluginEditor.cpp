@@ -109,6 +109,7 @@ SpectrummingAudioProcessorEditor::SpectrummingAudioProcessorEditor(
     buttonAttachments.push_back(std::make_unique<ButtonAttachment>(
         ownerProcessor.parameterState(), toggleIds[1], toggles[1]));
 
+    timerCallback();
     startTimerHz(30);
 }
 
@@ -267,7 +268,9 @@ void SpectrummingAudioProcessorEditor::FrameDisplay::paint(juce::Graphics& graph
     auto imageArea = bounds.reduced(8);
     imageArea.removeFromBottom(22);
     if(image.isValid())
-        graphics.drawImage(image, imageArea.toFloat(), juce::RectanglePlacement::centred);
+        graphics.drawImage(image, imageArea.toFloat(),
+                           juce::RectanglePlacement::centred
+                               | juce::RectanglePlacement::fillDestination);
     else
     {
         graphics.setColour(ehl::juce_design::Palette::ink());

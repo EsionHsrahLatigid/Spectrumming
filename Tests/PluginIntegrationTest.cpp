@@ -89,6 +89,11 @@ int main()
     stereo.outputBuses.add(juce::AudioChannelSet::stereo());
     passed &= check(processor->isBusesLayoutSupported(stereo), "stereo synth output should be supported");
 
+    const auto imageFile = makeTestImage();
+    juce::String error;
+    passed &= check(processor->loadImageFile(imageFile, error), "test image should load");
+    passed &= check(processor->previewImageSnapshot().isValid(), "loaded image should create a preview");
+
     std::unique_ptr<juce::AudioProcessorEditor> editor(processor->createEditor());
     passed &= check(editor != nullptr, "processor should create an editor");
     if(editor != nullptr)
@@ -99,6 +104,8 @@ int main()
         juce::Image capture(juce::Image::RGB, 640, 480, true);
         juce::Graphics graphics(capture);
         editor->paintEntireComponent(graphics, true);
+        passed &= check(capture.getPixelAt(32, 120).getBrightness() > 0.99f,
+                        "preview image should fill the display width");
         const auto capturePath = juce::SystemStats::getEnvironmentVariable(
             "SPECTRUMMING_EDITOR_CAPTURE", {});
         if(capturePath.isNotEmpty())
@@ -119,10 +126,6 @@ int main()
             }
     }
 
-    const auto imageFile = makeTestImage();
-    juce::String error;
-    passed &= check(processor->loadImageFile(imageFile, error), "test image should load");
-    passed &= check(processor->previewImageSnapshot().isValid(), "loaded image should create a preview");
     processor->selectCameraSource();
     passed &= check(processor->sourceStateSnapshot().kind
                         == spectrumming::plugin::SourceKind::liveBridge,
