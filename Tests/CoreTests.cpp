@@ -134,6 +134,15 @@ std::unique_ptr<LumaFrame> makeGradientFrame()
     return frame;
 }
 
+std::unique_ptr<LumaFrame> makeSingleBandFrame()
+{
+    auto frame = std::make_unique<LumaFrame>();
+    std::array<std::uint8_t, 64> pixels {};
+    pixels[31] = 255;
+    assert(frame->setPixels(1, 64, pixels.data()));
+    return frame;
+}
+
 void assertFiniteBounded(const float* buffer, int count)
 {
     bool anyNonZero = false;
@@ -260,6 +269,106 @@ void testStereoRenderRuntimeParametersAndNoAllocations()
     for (int i = 0; i < 256; ++i)
         stereoDiffers = stereoDiffers || !nearlyEqual(left[i], right[i], 0.000001f);
     assert(stereoDiffers);
+}
+
+void testMagnitudeSpectrumProducesDeterministicBandNoise()
+{
+    auto a = std::make_unique<AdditiveSynth>();
+    auto b = std::make_unique<AdditiveSynth>();
+    SynthConfig config;
+    config.sampleRate = 48000.0;
+    config.bandCount = BandCount::Bands64;
+    config.lowFrequencyHz = 500.0f;
+    config.highFrequencyHz = 8000.0f;
+    config.attackSeconds = 0.0f;
+    config.outputGain = 1.0f;
+    assert(a->prepare(config));
+    assert(b->prepare(config));
+
+    const auto frame = makeSingleBandFrame();
+    a->setFrame(*frame);
+    b->setFrame(*frame);
+    a->noteOn(60, 1.0f);
+    b->noteOn(60, 1.0f);
+
+    constexpr int sampleCount = 16384;
+    auto outputA = std::make_unique<std::array<float, sampleCount>>();
+    auto outputB = std::make_unique<std::array<float, sampleCount>>();
+    a->render(outputA->data(), sampleCount);
+    b->render(outputB->data(), sampleCount);
+
+    double sum = 0.0;
+    double sumSquares = 0.0;
+    int previousCrossing = -1;
+    int minimumInterval = sampleCount;
+    int maximumInterval = 0;
+    int crossingCount = 0;
+    for (int sample = 2048; sample < sampleCount; ++sample) {
+        const auto value = (*outputA)[static_cast<std::size_t>(sample)];
+        assert(std::isfinite(value));
+        assert(value >= -1.0f && value <= 1.0f);
+        assert(nearlyEqual(value, (*outputB)[static_cast<std::size_t>(sample)], 0.000001f));
+        sum += value;
+        sumSquares += static_cast<double>(value) * value;
+
+        if ((*outputA)[static_cast<std::size_t>(sample - 1)] <= 0.0f && value > 0.0f) {
+            if (previousCrossing >= 0) {
+                const auto interval = sample - previousCrossing;
+                minimumInterval = std::min(minimumInterval, interval);
+                maximumInterval = std::max(maximumInterval, interval);
+            }
+            previousCrossing = sample;
+            ++crossingCount;
+        }
+    }
+
+    const auto measuredSamples = static_cast<double>(sampleCount - 2048);
+    const auto mean = sum / measuredSamples;
+    const auto rms = std::sqrt(sumSquares / measuredSamples);
+    assert(rms > 0.0001);
+    assert(std::abs(mean) < rms * 0.25);
+    assert(crossingCount > 100);
+    assert(maximumInterval - minimumInterval >= 2);
+}
+
+void testMaximumPolyphonyNoiseBankRemainsHostSafe()
+{
+    auto synth = std::make_unique<AdditiveSynth>();
+    SynthConfig config;
+    config.sampleRate = 48000.0;
+    config.bandCount = BandCount::Bands256;
+    config.lowFrequencyHz = 20.0f;
+    config.highFrequencyHz = 20000.0f;
+    config.attackSeconds = 0.0f;
+    config.outputGain = 4.0f;
+    assert(synth->prepare(config));
+    const auto frame = makeGradientFrame();
+    synth->setFrame(*frame);
+    for (int voice = 0; voice < AdditiveSynth::MaxVoices; ++voice)
+        synth->noteOn(48 + voice * 3, 1.0f);
+
+    constexpr int sampleCount = 2048;
+    auto left = std::make_unique<std::array<float, sampleCount>>();
+    auto right = std::make_unique<std::array<float, sampleCount>>();
+    gAllocationCount = 0;
+    gCountAllocations = true;
+    synth->renderStereo(left->data(), right->data(), sampleCount);
+    gCountAllocations = false;
+    assert(gAllocationCount == 0);
+
+    int railSamples = 0;
+    double energy = 0.0;
+    for (int sample = 0; sample < sampleCount; ++sample) {
+        const auto l = (*left)[static_cast<std::size_t>(sample)];
+        const auto r = (*right)[static_cast<std::size_t>(sample)];
+        assert(std::isfinite(l) && std::isfinite(r));
+        assert(l >= -1.0f && l <= 1.0f);
+        assert(r >= -1.0f && r <= 1.0f);
+        railSamples += std::abs(l) >= 0.9999f || std::abs(r) >= 0.9999f ? 1 : 0;
+        energy += static_cast<double>(l) * l + static_cast<double>(r) * r;
+    }
+    assert(std::sqrt(energy / static_cast<double>(sampleCount * 2)) > 0.001);
+    assert(railSamples < sampleCount / 2);
 }
 
 void testNoteOnRetriggersExistingVoiceFromStartOffset()
@@ -496,6 +605,8 @@ int main()
     testSynthPrepareBandsAndVoices();
     testSynthRenderDeterministicBoundedAndNoAllocations();
     testStereoRenderRuntimeParametersAndNoAllocations();
+    testMagnitudeSpectrumProducesDeterministicBandNoise();
+    testMaximumPolyphonyNoiseBankRemainsHostSafe();
     testNoteOnRetriggersExistingVoiceFromStartOffset();
     testVoiceStealingPrefersOldestReleasedVoice();
     testOneShotVoiceReleaseAndStop();

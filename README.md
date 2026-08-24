@@ -9,6 +9,7 @@ Version 0.1 supports static images in the plug-in and UVC cameras through the co
 - Horizontal position is scan time; `FORWARD`, `REVERSE`, and `PING-PONG` select traversal.
 - Image top maps to the highest band and image bottom maps to the lowest band.
 - Luma is shaped by `BLACK`, `GAMMA`, and `INVERT`, then interpolated into 128 logarithmic bands.
+- Each band controls a finite-bandwidth noise resonator rather than a phase-locked sine oscillator. The image therefore acts as a spectral envelope over reproducible noise excitation, producing an inherently granular, rough reconstruction without a post distortion effect.
 - Up to eight voices preserve MIDI sample offsets, velocity, note-relative transposition, attack, and release.
 - The audio callback performs no file I/O, camera work, locking, logging, or dynamic allocation.
 

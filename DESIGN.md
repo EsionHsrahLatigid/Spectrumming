@@ -2,7 +2,7 @@
 
 ## Source of truth
 - Status: Implemented v0.1
-- Last refreshed: 2026-08-18
+- Last refreshed: 2026-08-25
 - Primary product surfaces: JUCE plug-in editor, Standalone application shell, staged release metadata, README/build documentation.
 - Evidence reviewed: repository root, empty `Source/` and `Tests/`, sibling EHL JUCE projects `DeltaSpine` and `PacketRot`, installed OMX design template, installed EHL brand/plugin UI references, workspace EHL evidence tree at `/Users/2bit/prog/ehl`.
 
@@ -80,6 +80,7 @@
 ## Resolved decisions
 
 - Public controls: 20 parameters across trigger/timing, spectrum mapping, and voice/output groups.
+- Spectral synthesis: image rows control a logarithmic bank of finite-bandwidth noise resonators. Deterministic per-voice noise supplies the phase information absent from the magnitude-only image, so roughness comes from the reconstruction model rather than an added distortion or `grit` control.
 - Editor: fixed 640×480 operational surface using the shared EHL chrome and short mark.
 - Live input: a separate `Spectrumming Bridge` owns UVC and publishes bounded gray8 frames; the plug-in owns only the neutral consumer and audio-safe exchange.
 - Live cadence: the plug-in polls the latest-only transport at 30 Hz as a message-thread/UI work ceiling, not as a required camera frame rate; one second without progress invalidates the preview.

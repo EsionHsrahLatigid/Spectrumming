@@ -10,6 +10,8 @@ namespace {
 
 constexpr float Pi = 3.14159265358979323846f;
 constexpr float TwoPi = 2.0f * Pi;
+constexpr float ResonatorRelativeBandwidth = 0.12f;
+constexpr float ResonatorMinimumBandwidthHz = 12.0f;
 
 float clamp01(float value) noexcept
 {
@@ -32,6 +34,14 @@ bool isSupportedBandCount(BandCount bandCount) noexcept
     return bandCount == BandCount::Bands64
         || bandCount == BandCount::Bands128
         || bandCount == BandCount::Bands256;
+}
+
+float nextBipolarNoise(std::uint32_t& state) noexcept
+{
+    state ^= state << 13U;
+    state ^= state >> 17U;
+    state ^= state << 5U;
+    return static_cast<float>(state >> 8U) * (2.0f / 16777215.0f) - 1.0f;
 }
 
 } // namespace
@@ -208,6 +218,11 @@ void AdditiveSynth::noteOn(int midiNote, float velocity) noexcept
     voice.velocity = clamp01(velocity);
     voice.envelope = 0.0f;
     voice.age = nextAge++;
+    voice.noiseState = 0x9e3779b9U
+        ^ (static_cast<std::uint32_t>(midiNote + 1) * 0x85ebca6bU)
+        ^ (voice.age * 0xc2b2ae35U);
+    if (voice.noiseState == 0)
+        voice.noiseState = 1;
     voice.scanner.setMode(scanMode);
     voice.scanner.setCycleMode(cycleMode);
     voice.scanner.reset(startOffset);
@@ -341,7 +356,10 @@ void AdditiveSynth::renderInternal(float* leftOutput, float* rightOutput, int nu
         return;
 
     const float nyquistGuard = static_cast<float>(sampleRate) * 0.45f;
-    const float voiceScale = 1.0f / static_cast<float>(MaxVoices);
+    // Each voice has an independent deterministic noise excitation, so power
+    // normalization is appropriate here. The former coherent sine bank needed
+    // amplitude normalization instead.
+    const float voiceScale = 1.0f / std::sqrt(static_cast<float>(MaxVoices));
     const float bandScale = activeBandCount > 0 ? 1.0f / std::sqrt(static_cast<float>(activeBandCount)) : 0.0f;
     const float frameSnap = frameSmoothing >= 1.0f ? 1.0f : frameSmoothing;
 
@@ -366,18 +384,25 @@ void AdditiveSynth::renderInternal(float* leftOutput, float* rightOutput, int nu
 
             const float column = voice.scanner.getPosition();
             const float ratio = getTranspositionRatio(voice.midiNote);
+            const float noise = nextBipolarNoise(voice.noiseState);
+            const float differentiatedNoise = noise - voice.noiseDelayedByTwo;
+            voice.noiseDelayedByTwo = voice.previousNoise;
+            voice.previousNoise = noise;
             float voiceLeft = 0.0f;
             float voiceRight = 0.0f;
 
             for (int band = 0; band < activeBandCount; ++band) {
                 const float frequency = bandFrequencies[static_cast<std::size_t>(band)] * ratio;
-                if (frequency >= nyquistGuard)
+                const auto bandIndex = static_cast<std::size_t>(band);
+                if (frequency >= nyquistGuard) {
+                    voice.resonatorState1[bandIndex] = 0.0f;
+                    voice.resonatorState2[bandIndex] = 0.0f;
                     continue;
+                }
 
                 const float row = activeBandCount > 1
                     ? 1.0f - static_cast<float>(band) / static_cast<float>(activeBandCount - 1)
                     : 0.0f;
-                const auto bandIndex = static_cast<std::size_t>(band);
                 const float targetLevel = shapeLuma(frame.sample(column, row));
                 if (frameSnap >= 1.0f)
                     voice.bandLevels[bandIndex] = targetLevel;
@@ -385,16 +410,29 @@ void AdditiveSynth::renderInternal(float* leftOutput, float* rightOutput, int nu
                     voice.bandLevels[bandIndex] += (targetLevel - voice.bandLevels[bandIndex]) * frameSnap;
 
                 const float amplitude = voice.bandLevels[bandIndex] * voice.velocity * voice.envelope;
-                const float oscillator = std::sin(voice.phases[bandIndex]) * amplitude;
+                if (voice.resonatorFrequencies[bandIndex] != frequency) {
+                    const float bandwidth = std::max(ResonatorMinimumBandwidthHz,
+                                                     frequency * ResonatorRelativeBandwidth);
+                    // Two-pole resonator bandwidth relation: R = exp(-pi * B / fs).
+                    const float radius = std::exp(-Pi * bandwidth / static_cast<float>(sampleRate));
+                    voice.resonatorFrequencies[bandIndex] = frequency;
+                    voice.resonatorCoefficients[bandIndex] = 2.0f * radius
+                        * std::cos(TwoPi * frequency / static_cast<float>(sampleRate));
+                    voice.resonatorRadiusSquared[bandIndex] = radius * radius;
+                    voice.resonatorExcitationGains[bandIndex] = 1.0f - radius;
+                }
+                const float resonated = voice.resonatorExcitationGains[bandIndex] * differentiatedNoise
+                    + voice.resonatorCoefficients[bandIndex] * voice.resonatorState1[bandIndex]
+                    - voice.resonatorRadiusSquared[bandIndex] * voice.resonatorState2[bandIndex];
+                voice.resonatorState2[bandIndex] = voice.resonatorState1[bandIndex];
+                voice.resonatorState1[bandIndex] = std::isfinite(resonated) ? resonated : 0.0f;
+                const float bandNoise = voice.resonatorState1[bandIndex] * amplitude;
                 const float pan = activeBandCount > 1 ? row * 2.0f - 1.0f : 0.0f;
                 const float leftGain = 1.0f - stereoWidth * std::max(0.0f, pan);
                 const float rightGain = 1.0f + stereoWidth * std::min(0.0f, pan);
 
-                voiceLeft += oscillator * leftGain;
-                voiceRight += oscillator * rightGain;
-                voice.phases[static_cast<std::size_t>(band)] += frequency * TwoPi / static_cast<float>(sampleRate);
-                if (voice.phases[static_cast<std::size_t>(band)] >= TwoPi)
-                    voice.phases[static_cast<std::size_t>(band)] = std::fmod(voice.phases[static_cast<std::size_t>(band)], TwoPi);
+                voiceLeft += bandNoise * leftGain;
+                voiceRight += bandNoise * rightGain;
             }
 
             mixedLeft += voiceLeft * bandScale * voiceScale;
@@ -512,6 +550,7 @@ void AdditiveSynth::clearVoices() noexcept
 {
     for (auto& voice : voices)
         voice = Voice{};
+    nextAge = 1;
 }
 
 float AdditiveSynth::getVoiceScanPositionForTest(int voiceIndex) const noexcept

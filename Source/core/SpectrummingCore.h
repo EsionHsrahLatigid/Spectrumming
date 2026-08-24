@@ -131,8 +131,16 @@ private:
         float velocity = 0.0f;
         float envelope = 0.0f;
         std::uint32_t age = 0;
+        std::uint32_t noiseState = 1;
+        float previousNoise = 0.0f;
+        float noiseDelayedByTwo = 0.0f;
         ScanPhase scanner;
-        std::array<float, MaxBands> phases{};
+        std::array<float, MaxBands> resonatorState1{};
+        std::array<float, MaxBands> resonatorState2{};
+        std::array<float, MaxBands> resonatorFrequencies{};
+        std::array<float, MaxBands> resonatorCoefficients{};
+        std::array<float, MaxBands> resonatorRadiusSquared{};
+        std::array<float, MaxBands> resonatorExcitationGains{};
         std::array<float, MaxBands> bandLevels{};
     };
 
