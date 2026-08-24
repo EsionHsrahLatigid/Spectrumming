@@ -1,4 +1,5 @@
 #include "BridgeDefaults.h"
+#include "BackgroundCaptureActivity.h"
 #include "JuceCameraFrameSource.h"
 #include "SharedFrameFile.h"
 
@@ -36,6 +37,7 @@ public:
         ehl::juce_design::styleLabel(statusLabel);
         ehl::juce_design::styleToggle(runButton);
         styleCommand(refreshButton);
+        styleCommand(quitButton);
 
         deviceBox.setName("UVC camera device");
         runButton.setButtonText("START CAMERA");
@@ -44,10 +46,15 @@ public:
         addAndMakeVisible(deviceBox);
         addAndMakeVisible(runButton);
         addAndMakeVisible(refreshButton);
+        addAndMakeVisible(quitButton);
         addAndMakeVisible(statusLabel);
 
         refreshButton.onClick = [this] { refreshDevices(); };
         runButton.onClick = [this] { toggleCamera(); };
+        quitButton.onClick = []
+        {
+            juce::JUCEApplication::getInstance()->systemRequestedQuit();
+        };
 
         if(channel.openWriter())
             statusLabel.setText("BRIDGE READY / NO CAMERA", juce::dontSendNotification);
@@ -61,6 +68,7 @@ public:
     ~BridgeComponent() override
     {
         camera.stop();
+        endBackgroundCaptureActivity(backgroundActivity);
         setLookAndFeel(nullptr);
     }
 
@@ -84,9 +92,11 @@ public:
         deviceBox.setBounds(area.removeFromTop(40));
         area.removeFromTop(8);
         auto commands = area.removeFromTop(40);
-        refreshButton.setBounds(commands.removeFromLeft(112));
+        refreshButton.setBounds(commands.removeFromLeft(104));
         commands.removeFromLeft(8);
         runButton.setBounds(commands.removeFromLeft(160));
+        commands.removeFromLeft(8);
+        quitButton.setBounds(commands.removeFromLeft(144));
         area.removeFromTop(8);
         statusLabel.setBounds(area.removeFromTop(28));
     }
@@ -96,7 +106,7 @@ private:
     {
         const auto selected = deviceBox.getText();
         deviceBox.clear(juce::dontSendNotification);
-        const auto devices = juce::CameraDevice::getAvailableDevices();
+        const auto devices = JuceCameraFrameSource::getAvailableDevices();
         for(int index = 0; index < devices.size(); ++index)
             deviceBox.addItem(devices[index], index + 1);
 
@@ -118,6 +128,8 @@ private:
         if(running)
         {
             camera.stop();
+            endBackgroundCaptureActivity(backgroundActivity);
+            backgroundActivity = nullptr;
             running = false;
             runButton.setButtonText("START CAMERA");
             statusLabel.setText("BRIDGE READY / CAMERA STOPPED", juce::dontSendNotification);
@@ -126,6 +138,12 @@ private:
 
         const auto index = deviceBox.getSelectedItemIndex();
         running = index >= 0 && camera.start(index);
+        if(running)
+        {
+            backgroundActivity = beginBackgroundCaptureActivity();
+            lastPublishedFrameCount = camera.getPublishedFrameCount();
+            lastFrameProgressMs = juce::Time::getMillisecondCounterHiRes();
+        }
         runButton.setButtonText(running ? "STOP CAMERA" : "START CAMERA");
         statusLabel.setText(running ? "STREAMING UVC / SPCT" : "CAMERA OPEN FAILED",
                             juce::dontSendNotification);
@@ -136,9 +154,26 @@ private:
         if(running && ! channel.isOpen())
         {
             camera.stop();
+            endBackgroundCaptureActivity(backgroundActivity);
+            backgroundActivity = nullptr;
             running = false;
             runButton.setButtonText("START CAMERA");
             statusLabel.setText("SHARED FRAME CHANNEL LOST", juce::dontSendNotification);
+        }
+        else if(running)
+        {
+            const auto now = juce::Time::getMillisecondCounterHiRes();
+            const auto published = camera.getPublishedFrameCount();
+            if(published != lastPublishedFrameCount)
+            {
+                lastPublishedFrameCount = published;
+                lastFrameProgressMs = now;
+            }
+
+            const auto status = now - lastFrameProgressMs >= 1000.0
+                ? "CAMERA ACTIVE / NO NEW FRAME"
+                : "STREAMING UVC / SPCT / FRAME " + juce::String(published);
+            statusLabel.setText(status, juce::dontSendNotification);
         }
     }
 
@@ -148,8 +183,12 @@ private:
     juce::ComboBox deviceBox;
     juce::ToggleButton runButton;
     juce::TextButton refreshButton { "REFRESH" };
+    juce::TextButton quitButton { "QUIT BRIDGE" };
     juce::Label statusLabel;
     bool running = false;
+    void* backgroundActivity = nullptr;
+    std::uint64_t lastPublishedFrameCount = 0;
+    double lastFrameProgressMs = 0.0;
 };
 
 class BridgeApplication final : public juce::JUCEApplication
@@ -174,6 +213,11 @@ public:
         quit();
     }
 
+    void anotherInstanceStarted(const juce::String&) override
+    {
+        showWindow();
+    }
+
 private:
     class MainWindow final : public juce::DocumentWindow
     {
@@ -192,9 +236,22 @@ private:
 
         void closeButtonPressed() override
         {
-            juce::JUCEApplication::getInstance()->systemRequestedQuit();
+            setMinimised(true);
+        }
+
+        void showWindow()
+        {
+            setMinimised(false);
+            setVisible(true);
+            toFront(true);
         }
     };
+
+    void showWindow()
+    {
+        if(window != nullptr)
+            window->showWindow();
+    }
 
     std::unique_ptr<MainWindow> window;
 };

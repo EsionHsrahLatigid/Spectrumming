@@ -82,4 +82,6 @@
 - Public controls: 20 parameters across trigger/timing, spectrum mapping, and voice/output groups.
 - Editor: fixed 640×480 operational surface using the shared EHL chrome and short mark.
 - Live input: a separate `Spectrumming Bridge` owns UVC and publishes bounded gray8 frames; the plug-in owns only the neutral consumer and audio-safe exchange.
+- Live cadence: the plug-in polls the latest-only transport at 30 Hz as a message-thread/UI work ceiling, not as a required camera frame rate; one second without progress invalidates the preview.
+- Bridge lifecycle: closing the window backgrounds the existing capture process, `OPEN BRIDGE` restores that single instance, and only `STOP CAMERA` or `QUIT BRIDGE` releases the device; macOS holds a user-initiated background activity while capture is active.
 - Future input SDKs: Syphon, Spout, and nozzle remain bridge-side adapters behind `IFrameSink`; they do not change the plug-in/DSP contract.

@@ -146,6 +146,14 @@ int main()
     passed &= check(processor->sourceStateSnapshot().kind
                         == spectrumming::plugin::SourceKind::liveBridge,
                     "camera command should select the neutral live bridge source");
+    processor->setCameraFrozen(true);
+    passed &= check(processor->sourceStateSnapshot().frozen
+                        && processor->sourceStatusSnapshot() == "CAMERA / FROZEN",
+                    "freeze should retain an explicit camera state");
+    processor->setCameraFrozen(false);
+    passed &= check(processor->sourceStateSnapshot().stale
+                        && processor->sourceStatusSnapshot() == "CAMERA / WAITING FOR BRIDGE",
+                    "unfreeze should wait for a newly arriving live frame");
     processor->selectImageSource();
     const auto restoredPreview = processor->previewImageSnapshot();
     passed &= check(processor->sourceStateSnapshot().kind

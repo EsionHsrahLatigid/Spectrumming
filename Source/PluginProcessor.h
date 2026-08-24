@@ -5,6 +5,7 @@
 #include "core/SpectrummingCore.h"
 #include "plugin/FrameStateCodec.h"
 #include "plugin/LatestFrameExchange.h"
+#include "plugin/LiveFrameLiveness.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -78,6 +79,7 @@ private:
     void publishFrame(const spectrumming::plugin::EmbeddedFrame&, const juce::Image& preview);
     void timerCallback() override;
     void pollBridge();
+    void markBridgeUnavailable();
     void setStatus(const juce::String&);
     juce::File findBridgeTarget() const;
 
@@ -98,6 +100,7 @@ private:
     juce::String sourceStatus { "NO INPUT" };
 
     spectrumming::bridge::SharedFrameFile bridgeReader { spectrumming::bridge::defaultStreamId };
+    spectrumming::plugin::LiveFrameLiveness bridgeLiveness;
     std::uint64_t bridgeGeneration = 0;
     std::atomic<float> uiScanPosition { 0.0f };
     std::atomic<float> uiOutputPeak { 0.0f };

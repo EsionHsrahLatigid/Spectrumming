@@ -1,5 +1,6 @@
 #include "../Source/core/SpectrummingCore.h"
 #include "../Source/plugin/LatestFrameExchange.h"
+#include "../Source/plugin/LiveFrameLiveness.h"
 
 #include <atomic>
 #include <cassert>
@@ -473,6 +474,19 @@ void testFrameExchangeOwnershipUnderConcurrentUpdates()
     assert(framesRead.load(std::memory_order_relaxed) > 0);
 }
 
+void testLiveFrameLivenessTimeoutIsDeterministic()
+{
+    spectrumming::plugin::LiveFrameLiveness liveness;
+    liveness.beginWaiting(100.0);
+    assert(! liveness.signalExpired(100.0 + spectrumming::plugin::liveFrameSignalTimeoutMs - 0.1));
+    assert(liveness.signalExpired(100.0 + spectrumming::plugin::liveFrameSignalTimeoutMs));
+
+    liveness.frameReceived(1500.0);
+    assert(! liveness.signalExpired(1500.0 + spectrumming::plugin::liveFrameSignalTimeoutMs - 0.1));
+    assert(liveness.signalExpired(1500.0 + spectrumming::plugin::liveFrameSignalTimeoutMs));
+    assert(! liveness.signalExpired(1499.0));
+}
+
 } // namespace
 
 int main()
@@ -489,6 +503,7 @@ int main()
     testRootNoteChangesPitchPath();
     testAliasGuardStaysFinite();
     testFrameExchangeOwnershipUnderConcurrentUpdates();
+    testLiveFrameLivenessTimeoutIsDeterministic();
 
     std::cout << "CoreTests passed\n";
     return 0;

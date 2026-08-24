@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 
 #include "ParameterIDs.h"
+#include "plugin/LiveFrameLiveness.h"
 #include "plugin/PreviewPlacement.h"
 
 #include <cmath>
@@ -111,7 +112,7 @@ SpectrummingAudioProcessorEditor::SpectrummingAudioProcessorEditor(
         ownerProcessor.parameterState(), toggleIds[1], toggles[1]));
 
     timerCallback();
-    startTimerHz(30);
+    startTimerHz(spectrumming::plugin::liveFramePollRateHz);
 }
 
 SpectrummingAudioProcessorEditor::~SpectrummingAudioProcessorEditor()

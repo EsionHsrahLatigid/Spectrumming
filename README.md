@@ -26,6 +26,10 @@ The fixed 640×480 editor also provides `IMAGE`, `CAMERA`, `LOAD`, `OPEN BRIDGE`
 
 `Source/bridge/BridgeFrame.h` is the stable frame ABI. Producers submit validated frames through `IFrameSink`; platform adapters normalize them to bounded `gray8` frames before `SharedFrameFile` publishes the latest frame. The plug-in polls that transport on the message thread and crosses into audio through a fixed-capacity lock-free exchange.
 
+The live consumer polls at 30 Hz (about 33 ms), a deliberate message-thread and preview-work ceiling rather than a camera requirement. Faster producers overwrite intermediate frames in the latest-only transport, so latency stays bounded instead of building a queue; `FRAME SMOOTH` controls the audio-rate transition between accepted images. One second without a new frame (nominally 30 polls) marks the source as unavailable and clears the stale preview.
+
+Closing the Bridge window minimises it while capture continues under a macOS user-initiated background activity. `OPEN BRIDGE` restores the existing single instance, and `QUIT BRIDGE` explicitly stops the helper, ends the activity, and releases the camera. Bridge status changes to `CAMERA ACTIVE / NO NEW FRAME` if the device stops delivering for one second.
+
 Current and planned adapters:
 
 | Adapter | Process/platform | Status |

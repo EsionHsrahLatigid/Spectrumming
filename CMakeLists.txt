@@ -279,6 +279,7 @@ if(SPECTRUMMING_BUILD_PLUGIN)
             CAMERA_PERMISSION_TEXT "Spectrumming Bridge uses the selected camera as a visual spectrum source."
             PRODUCT_NAME "Spectrumming Bridge")
         target_sources(SpectrummingBridge PRIVATE
+            Source/bridge/BackgroundCaptureActivity.h
             Source/bridge/BridgeDefaults.h
             Source/bridge/BridgeFrame.h
             Source/bridge/BridgeInterfaces.h
@@ -286,6 +287,10 @@ if(SPECTRUMMING_BUILD_PLUGIN)
             Source/bridge/JuceCameraFrameSource.h
             Source/bridge/SharedFrameFile.cpp
             Source/bridge/SharedFrameFile.h)
+        if(APPLE)
+            target_sources(SpectrummingBridge PRIVATE
+                Source/bridge/MacBackgroundCaptureActivity.mm)
+        endif()
         target_include_directories(SpectrummingBridge PRIVATE Source)
         target_compile_definitions(SpectrummingBridge PRIVATE
             JUCE_REPORT_APP_USAGE=0

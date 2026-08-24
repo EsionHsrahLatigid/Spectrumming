@@ -56,7 +56,7 @@ SpectrummingAudioProcessor::SpectrummingAudioProcessor()
     : AudioProcessor(createBusesProperties()),
       parameters(*this, nullptr, stateType, createParameterLayout())
 {
-    startTimerHz(30);
+    startTimerHz(spectrumming::plugin::liveFramePollRateHz);
 }
 
 SpectrummingAudioProcessor::~SpectrummingAudioProcessor()
@@ -429,6 +429,7 @@ void SpectrummingAudioProcessor::selectImageSource()
 
 void SpectrummingAudioProcessor::selectCameraSource()
 {
+    bridgeLiveness.beginWaiting(juce::Time::getMillisecondCounterHiRes());
     {
         const juce::ScopedLock lock(sourceLock);
         sourceState = {};
@@ -440,13 +441,32 @@ void SpectrummingAudioProcessor::selectCameraSource()
     }
     if(! bridgeReader.isOpen())
         bridgeReader.openReader();
+
+    // Ignore a frame left by an earlier Bridge process. The next generation
+    // proves that the current producer is alive.
+    if(bridgeReader.isOpen())
+    {
+        spectrumming::bridge::FrameStorage ignored;
+        bridgeReader.readLatest(ignored, bridgeGeneration);
+    }
 }
 
 void SpectrummingAudioProcessor::setCameraFrozen(const bool frozen)
 {
+    if(! frozen)
+        bridgeLiveness.beginWaiting(juce::Time::getMillisecondCounterHiRes());
+
     const juce::ScopedLock lock(sourceLock);
     sourceState.frozen = frozen;
-    sourceStatus = frozen ? "CAMERA / FROZEN" : "CAMERA / LIVE";
+    if(frozen)
+    {
+        sourceStatus = "CAMERA / FROZEN";
+    }
+    else
+    {
+        sourceState.stale = true;
+        sourceStatus = "CAMERA / WAITING FOR BRIDGE";
+    }
 }
 
 bool SpectrummingAudioProcessor::launchBridge()
@@ -458,7 +478,10 @@ bool SpectrummingAudioProcessor::launchBridge()
         return false;
     }
 
-    const auto launched = target.startAsProcess();
+    // Passing an argument forces a second launch attempt on macOS. JUCE's
+    // single-instance handoff then asks an already-running Bridge to restore
+    // its backgrounded window without interrupting camera capture.
+    const auto launched = target.startAsProcess("--show");
     setStatus(launched ? "BRIDGE LAUNCHED" : "BRIDGE LAUNCH FAILED");
     return launched;
 }
@@ -510,13 +533,20 @@ void SpectrummingAudioProcessor::pollBridge()
         return;
     if(! bridgeReader.isOpen() && ! bridgeReader.openReader())
     {
-        setStatus("NO SIGNAL / OPEN BRIDGE");
+        markBridgeUnavailable();
         return;
     }
 
+    const auto nowMs = juce::Time::getMillisecondCounterHiRes();
     spectrumming::bridge::FrameStorage frame;
     if(! bridgeReader.readLatest(frame, bridgeGeneration))
+    {
+        if(bridgeLiveness.signalExpired(nowMs))
+            markBridgeUnavailable();
         return;
+    }
+
+    bridgeLiveness.frameReceived(nowMs);
 
     spectrumming::plugin::EmbeddedFrame embedded;
     embedded.width = static_cast<int>(frame.header.width);
@@ -536,6 +566,18 @@ void SpectrummingAudioProcessor::pollBridge()
     sourceState.stale = false;
     sourceState.streamId = juce::String::toHexString(static_cast<juce::int64>(frame.header.streamId));
     sourceStatus = "CAMERA / LIVE / FRAME " + juce::String(static_cast<juce::int64>(frame.header.frameId));
+}
+
+void SpectrummingAudioProcessor::markBridgeUnavailable()
+{
+    const juce::ScopedLock lock(sourceLock);
+    if(sourceState.kind != spectrumming::plugin::SourceKind::liveBridge || sourceState.frozen)
+        return;
+
+    sourceState.displayName.clear();
+    sourceState.stale = true;
+    previewImage = {};
+    sourceStatus = "NO SIGNAL / OPEN BRIDGE";
 }
 
 void SpectrummingAudioProcessor::setStatus(const juce::String& status)

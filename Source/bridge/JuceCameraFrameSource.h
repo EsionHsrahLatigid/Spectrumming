@@ -16,6 +16,10 @@ namespace spectrumming::bridge {
 
 class JuceCameraFrameSource final : private juce::CameraDevice::Listener {
 public:
+    static juce::StringArray getAvailableDevices() {
+        return juce::CameraDevice::getAvailableDevices();
+    }
+
     JuceCameraFrameSource(IFrameSink& sink, std::uint64_t streamId)
         : sink_(sink), streamId_(streamId) {}
 
@@ -47,6 +51,10 @@ public:
             device_->removeListener(this);
             device_.reset();
         }
+    }
+
+    std::uint64_t getPublishedFrameCount() const noexcept {
+        return publishedFrames_.load(std::memory_order_relaxed);
     }
 
 private:
@@ -89,16 +97,19 @@ private:
                                             nextFrameId_.fetch_add(1u),
                                             timestamp,
                                             streamId_);
-        sink_.submitFrame(FrameView {
-            header,
-            scratch_.data(),
-            scratch_.size(),
-        });
+        if (sink_.submitFrame(FrameView {
+                header,
+                scratch_.data(),
+                scratch_.size(),
+            }) == ValidationCode::ok) {
+            publishedFrames_.fetch_add(1u, std::memory_order_relaxed);
+        }
     }
 
     IFrameSink& sink_;
     std::uint64_t streamId_ = 0;
     std::atomic<std::uint64_t> nextFrameId_ { 1 };
+    std::atomic<std::uint64_t> publishedFrames_ { 0 };
     std::vector<std::uint8_t> scratch_;
     std::unique_ptr<juce::CameraDevice> device_;
 };
