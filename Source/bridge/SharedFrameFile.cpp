@@ -10,11 +10,26 @@ juce::String streamSuffix(const std::uint64_t streamId)
 {
     return juce::String::toHexString(static_cast<juce::int64>(streamId));
 }
+
+juce::File sharedFrameDirectory()
+{
+#if JUCE_MAC
+    const auto temporaryRoot = juce::SystemStats::getEnvironmentVariable("TMPDIR", {});
+    const auto root = temporaryRoot.isNotEmpty()
+        ? juce::File(temporaryRoot)
+        : juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+              .getChildFile("Caches");
+#else
+    const auto root = juce::File::getSpecialLocation(juce::File::tempDirectory);
+#endif
+
+    return root.getChildFile("EsionHsrahLatigid").getChildFile("Spectrumming");
+}
 } // namespace
 
 SharedFrameFile::SharedFrameFile(const std::uint64_t id)
     : streamId(id),
-      file(juce::File::getSpecialLocation(juce::File::tempDirectory)
+      file(sharedFrameDirectory()
                .getChildFile("spectrumming-bridge-v1-" + streamSuffix(id) + ".frames")),
       lock("jp.ehl.spectrumming.bridge." + streamSuffix(id))
 {

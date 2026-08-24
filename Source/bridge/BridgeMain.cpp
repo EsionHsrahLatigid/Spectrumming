@@ -10,6 +10,18 @@
 
 namespace spectrumming::bridge
 {
+namespace
+{
+void styleCommand(juce::Button& button)
+{
+    button.setColour(juce::TextButton::buttonColourId, ehl::juce_design::Palette::ink());
+    button.setColour(juce::TextButton::buttonOnColourId, ehl::juce_design::Palette::paper());
+    button.setColour(juce::TextButton::textColourOffId, ehl::juce_design::Palette::paper());
+    button.setColour(juce::TextButton::textColourOnId, ehl::juce_design::Palette::ink());
+    button.setWantsKeyboardFocus(true);
+}
+} // namespace
+
 class BridgeComponent final : public juce::Component,
                               private juce::Timer
 {
@@ -23,11 +35,10 @@ public:
         ehl::juce_design::styleComboBox(deviceBox);
         ehl::juce_design::styleLabel(statusLabel);
         ehl::juce_design::styleToggle(runButton);
-        ehl::juce_design::styleToggle(refreshButton);
+        styleCommand(refreshButton);
 
         deviceBox.setName("UVC camera device");
         runButton.setButtonText("START CAMERA");
-        refreshButton.setButtonText("REFRESH");
         statusLabel.setJustificationType(juce::Justification::centredLeft);
 
         addAndMakeVisible(deviceBox);
@@ -136,7 +147,7 @@ private:
     JuceCameraFrameSource camera;
     juce::ComboBox deviceBox;
     juce::ToggleButton runButton;
-    juce::ToggleButton refreshButton;
+    juce::TextButton refreshButton { "REFRESH" };
     juce::Label statusLabel;
     bool running = false;
 };
