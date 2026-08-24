@@ -28,9 +28,13 @@ set(required
     "${STAGE_DIR}/vst3/${SLUG}_vst3_plugin.vst3")
 
 if(APPLE)
-    list(APPEND required "${STAGE_DIR}/standalone/${SLUG}_standalone_plugin.app")
+    list(APPEND required
+        "${STAGE_DIR}/standalone/${SLUG}_standalone_plugin.app"
+        "${STAGE_DIR}/bridge/Spectrumming Bridge.app")
 elseif(WIN32)
-    list(APPEND required "${STAGE_DIR}/standalone/${SLUG}_standalone_plugin.exe")
+    list(APPEND required
+        "${STAGE_DIR}/standalone/${SLUG}_standalone_plugin.exe"
+        "${STAGE_DIR}/bridge/Spectrumming Bridge.exe")
 else()
     list(APPEND required "${STAGE_DIR}/standalone/${SLUG}_standalone_plugin")
 endif()
@@ -44,6 +48,27 @@ foreach(path IN LISTS required)
         message(FATAL_ERROR "Missing staged artifact: ${path}")
     endif()
 endforeach()
+
+if(APPLE)
+    set(bridge_info_plist "${STAGE_DIR}/bridge/Spectrumming Bridge.app/Contents/Info.plist")
+    file(READ "${bridge_info_plist}" bridge_plist)
+    foreach(token IN ITEMS
+            "<key>NSCameraUsageDescription</key>"
+            "<string>Spectrumming Bridge uses the selected camera as a visual spectrum source.</string>")
+        string(FIND "${bridge_plist}" "${token}" token_index)
+        if(token_index EQUAL -1)
+            message(FATAL_ERROR "Bridge Info.plist missing camera permission token: ${token}")
+        endif()
+    endforeach()
+
+    execute_process(
+        COMMAND codesign --verify --deep --strict "${STAGE_DIR}/bridge/Spectrumming Bridge.app"
+        RESULT_VARIABLE bridge_codesign_result
+        ERROR_VARIABLE bridge_codesign_error)
+    if(NOT bridge_codesign_result EQUAL 0)
+        message(FATAL_ERROR "Bridge app signature verification failed: ${bridge_codesign_error}")
+    endif()
+endif()
 
 file(READ "${STAGE_DIR}/ARTIFACTS.txt" manifest)
 foreach(token IN ITEMS

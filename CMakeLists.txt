@@ -308,6 +308,8 @@ if(SPECTRUMMING_BUILD_PLUGIN)
                     COMMAND ${CMAKE_COMMAND} -E rm -rf "${spectrumming_staged_products}/bridge/Spectrumming Bridge.app"
                     COMMAND ${CMAKE_COMMAND} -E copy_directory
                         "$<TARGET_BUNDLE_DIR:SpectrummingBridge>"
+                        "${spectrumming_staged_products}/bridge/Spectrumming Bridge.app"
+                    COMMAND codesign --force --deep --sign -
                         "${spectrumming_staged_products}/bridge/Spectrumming Bridge.app")
             elseif(WIN32)
                 add_custom_command(TARGET SpectrummingBridge POST_BUILD

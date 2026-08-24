@@ -451,15 +451,14 @@ void SpectrummingAudioProcessor::setCameraFrozen(const bool frozen)
 
 bool SpectrummingAudioProcessor::launchBridge()
 {
-    const auto executable = findBridgeExecutable();
-    if(! executable.existsAsFile())
+    const auto target = findBridgeTarget();
+    if(! target.exists())
     {
         setStatus("BRIDGE APP NOT FOUND");
         return false;
     }
 
-    bridgeProcess = std::make_unique<juce::ChildProcess>();
-    const auto launched = bridgeProcess->start(juce::StringArray { executable.getFullPathName() }, 0);
+    const auto launched = target.startAsProcess();
     setStatus(launched ? "BRIDGE LAUNCHED" : "BRIDGE LAUNCH FAILED");
     return launched;
 }
@@ -545,7 +544,7 @@ void SpectrummingAudioProcessor::setStatus(const juce::String& status)
     sourceStatus = status;
 }
 
-juce::File SpectrummingAudioProcessor::findBridgeExecutable() const
+juce::File SpectrummingAudioProcessor::findBridgeTarget() const
 {
     return spectrumming::plugin::BridgeLocator::resolve();
 }

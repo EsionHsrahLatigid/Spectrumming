@@ -79,7 +79,7 @@ private:
     void timerCallback() override;
     void pollBridge();
     void setStatus(const juce::String&);
-    juce::File findBridgeExecutable() const;
+    juce::File findBridgeTarget() const;
 
     juce::AudioProcessorValueTreeState parameters;
     spectrumming::core::AdditiveSynth synth;
@@ -99,8 +99,6 @@ private:
 
     spectrumming::bridge::SharedFrameFile bridgeReader { spectrumming::bridge::defaultStreamId };
     std::uint64_t bridgeGeneration = 0;
-    std::unique_ptr<juce::ChildProcess> bridgeProcess;
-
     std::atomic<float> uiScanPosition { 0.0f };
     std::atomic<float> uiOutputPeak { 0.0f };
     std::atomic<int> uiActiveVoices { 0 };

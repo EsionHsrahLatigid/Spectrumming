@@ -6,7 +6,6 @@ namespace spectrumming::ui
 {
 inline juce::RectanglePlacement previewImagePlacement() noexcept
 {
-    return { juce::RectanglePlacement::centred
-             | juce::RectanglePlacement::fillDestination };
+    return { juce::RectanglePlacement::stretchToFit };
 }
 } // namespace spectrumming::ui

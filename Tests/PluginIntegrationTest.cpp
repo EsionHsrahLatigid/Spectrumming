@@ -66,25 +66,32 @@ int main()
 #if JUCE_MAC
     const auto fakeModule = locatorRoot.getChildFile(
         "vst3/Spectrumming.vst3/Contents/MacOS/Spectrumming");
-    const auto fakeBridge = locatorRoot.getChildFile(
-        "bridge/Spectrumming Bridge.app/Contents/MacOS/Spectrumming Bridge");
+    const auto fakeBridge = locatorRoot.getChildFile("bridge/Spectrumming Bridge.app");
+    const auto fakeBridgeExecutable = fakeBridge.getChildFile(
+        "Contents/MacOS/Spectrumming Bridge");
 #elif JUCE_WINDOWS
     const auto fakeModule = locatorRoot.getChildFile("vst3/Spectrumming.vst3/Contents/x86_64-win/Spectrumming.vst3");
     const auto fakeBridge = locatorRoot.getChildFile("bridge/Spectrumming Bridge.exe");
+    const auto fakeBridgeExecutable = fakeBridge;
 #else
     const auto fakeModule = locatorRoot.getChildFile("vst3/Spectrumming.vst3");
     const auto fakeBridge = juce::File {};
+    const auto fakeBridgeExecutable = juce::File {};
 #endif
     fakeModule.getParentDirectory().createDirectory();
     fakeModule.replaceWithText("module");
     if(fakeBridge != juce::File {})
     {
-        fakeBridge.getParentDirectory().createDirectory();
-        fakeBridge.replaceWithText("bridge");
+        fakeBridgeExecutable.getParentDirectory().createDirectory();
+        fakeBridgeExecutable.replaceWithText("bridge");
         passed &= check(spectrumming::plugin::BridgeLocator::findNear(fakeModule) == fakeBridge,
-                        "bridge locator should resolve a staged companion beside the plug-in formats");
+                        "bridge locator should resolve the launchable staged companion");
     }
     locatorRoot.deleteRecursively();
+
+    if(juce::SystemStats::getEnvironmentVariable("SPECTRUMMING_BRIDGE_LAUNCH_SMOKE", {}) == "1")
+        passed &= check(processor->launchBridge(),
+                        "bridge app should launch through the platform application service");
 
     juce::AudioProcessor::BusesLayout stereo;
     stereo.outputBuses.add(juce::AudioChannelSet::stereo());
@@ -109,15 +116,12 @@ int main()
         const juce::Rectangle<float> displayArea { 0.0f, 0.0f, 592.0f, 82.0f };
         const auto placedArea = spectrumming::ui::previewImagePlacement().appliedTo(
             sourceArea, displayArea);
-        passed &= check(placedArea.getX() <= displayArea.getX()
-                            && placedArea.getY() <= displayArea.getY()
-                            && placedArea.getRight() >= displayArea.getRight()
-                            && placedArea.getBottom() >= displayArea.getBottom(),
-                        "preview image placement should cover the display");
+        passed &= check(placedArea == displayArea,
+                        "preview image placement should stretch to the full display");
         passed &= check(std::abs(placedArea.getWidth() / placedArea.getHeight()
                                     - sourceArea.getWidth() / sourceArea.getHeight())
-                            < 0.0001f,
-                        "preview image placement should preserve aspect ratio");
+                            > 0.0001f,
+                        "preview image placement should not preserve aspect ratio");
         const auto capturePath = juce::SystemStats::getEnvironmentVariable(
             "SPECTRUMMING_EDITOR_CAPTURE", {});
         if(capturePath.isNotEmpty())

@@ -14,6 +14,24 @@ namespace
 {
 int moduleAnchor = 0;
 
+juce::File normaliseLaunchTarget(const juce::File& candidate)
+{
+#if JUCE_MAC
+    if(candidate.existsAsFile())
+    {
+        const auto macOSDirectory = candidate.getParentDirectory();
+        const auto contentsDirectory = macOSDirectory.getParentDirectory();
+        const auto appBundle = contentsDirectory.getParentDirectory();
+        if(macOSDirectory.getFileName() == "MacOS"
+           && contentsDirectory.getFileName() == "Contents"
+           && appBundle.hasFileExtension(".app")
+           && appBundle.isDirectory())
+            return appBundle;
+    }
+#endif
+    return candidate;
+}
+
 juce::String stagedPlatformName()
 {
 #if JUCE_MAC
@@ -33,12 +51,12 @@ juce::File BridgeLocator::resolve()
     if(configured.isNotEmpty())
     {
         const juce::File candidate(configured);
-        if(candidate.existsAsFile())
-            return candidate;
+        if(candidate.exists())
+            return normaliseLaunchTarget(candidate);
     }
 
     for(const auto& origin : { currentModuleFile(), juce::File::getCurrentWorkingDirectory() })
-        if(const auto candidate = findNear(origin); candidate.existsAsFile())
+        if(const auto candidate = findNear(origin); candidate.exists())
             return candidate;
 
     return installedBridge();
@@ -49,13 +67,13 @@ juce::File BridgeLocator::findNear(const juce::File& origin)
     auto directory = origin.existsAsFile() ? origin.getParentDirectory() : origin;
     for(int depth = 0; depth < 12 && directory != juce::File {}; ++depth)
     {
-        if(const auto direct = bridgeBelow(directory); direct.existsAsFile())
+        if(const auto direct = bridgeBelow(directory); direct.exists())
             return direct;
 
         const auto nestedStage = directory.getChildFile("artifacts")
                                      .getChildFile("plugin-release")
                                      .getChildFile(stagedPlatformName());
-        if(const auto nested = bridgeBelow(nestedStage); nested.existsAsFile())
+        if(const auto nested = bridgeBelow(nestedStage); nested.exists())
             return nested;
 
         const auto parent = directory.getParentDirectory();
@@ -93,11 +111,11 @@ juce::File BridgeLocator::installedBridge()
 #if JUCE_MAC
     const auto userCandidate = juce::File::getSpecialLocation(juce::File::userHomeDirectory)
                                    .getChildFile("Applications")
-                                   .getChildFile("Spectrumming Bridge.app/Contents/MacOS/Spectrumming Bridge");
-    if(userCandidate.existsAsFile())
+                                   .getChildFile("Spectrumming Bridge.app");
+    if(userCandidate.isDirectory())
         return userCandidate;
     return juce::File("/Applications")
-        .getChildFile("Spectrumming Bridge.app/Contents/MacOS/Spectrumming Bridge");
+        .getChildFile("Spectrumming Bridge.app");
 #elif JUCE_WINDOWS
     return juce::File::getSpecialLocation(juce::File::globalApplicationsDirectory)
         .getChildFile("Spectrumming Bridge/Spectrumming Bridge.exe");
@@ -110,7 +128,7 @@ juce::File BridgeLocator::bridgeBelow(const juce::File& stageRoot)
 {
 #if JUCE_MAC
     return stageRoot.getChildFile("bridge")
-        .getChildFile("Spectrumming Bridge.app/Contents/MacOS/Spectrumming Bridge");
+        .getChildFile("Spectrumming Bridge.app");
 #elif JUCE_WINDOWS
     return stageRoot.getChildFile("bridge").getChildFile("Spectrumming Bridge.exe");
 #else

@@ -43,7 +43,7 @@ The `ehl_stage_products` target writes `ARTIFACTS.txt` and stages:
 
 The AU intentionally does not declare `sandboxSafe`: the live-source path uses a companion process and local shared-frame transport. Its plist suppresses JUCE's broad default `resourceUsage` exceptions.
 
-`OPEN BRIDGE` resolves `SPECTRUMMING_BRIDGE_PATH` first, then a bridge beside the staged VST3/AU/Standalone products, then the current working tree's staged artifacts, and finally `~/Applications` or the platform-wide application directory.
+`OPEN BRIDGE` resolves `SPECTRUMMING_BRIDGE_PATH` first, then a bridge beside the staged VST3/AU/Standalone products, then the current working tree's staged artifacts, and finally `~/Applications` or the platform-wide application directory. On macOS it opens the `.app` bundle through LaunchServices so camera privacy metadata is associated with the Bridge process; it never launches the bundle executable directly.
 
 ## Verification
 
